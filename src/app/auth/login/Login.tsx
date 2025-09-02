@@ -1,6 +1,7 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/contexts/AuthContext';
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 interface LoginProps {
   onGoogleSignIn?: () => void;
@@ -19,7 +20,7 @@ const LoginComponent: React.FC<LoginProps> = ({ onGoogleSignIn }) => {
   const handleGoogleSignIn = async() => {
    
 
-   window.location.href = 'http://localhost:8000/api/auth/google';
+   window.location.href = `${backendUrl}/api/auth/google`;
   };
 
 
