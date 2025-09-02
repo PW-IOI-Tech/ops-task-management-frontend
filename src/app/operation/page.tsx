@@ -57,15 +57,16 @@ const Page: React.FC = () => {
 
   // Helper function to check if a date is today
   const isToday = (dateString: string): boolean => {
-    const today = new Date();
-    const date = new Date(dateString);
-    
-    return (
-      date.getFullYear() === today.getFullYear() &&
-      date.getMonth() === today.getMonth() &&
-      date.getDate() === today.getDate()
-    );
-  };
+  const today = new Date();
+  const date = new Date(dateString);
+
+  return (
+    date.getUTCFullYear() === today.getUTCFullYear() &&
+    date.getUTCMonth() === today.getUTCMonth() &&
+    date.getUTCDate() === today.getUTCDate()
+  );
+};
+
 
   // Helper function to filter today's tasks
   const filterTodayTasks = (allAssignments: Assignment[]): Assignment[] => {

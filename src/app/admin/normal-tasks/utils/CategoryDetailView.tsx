@@ -33,7 +33,7 @@ const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 
 interface CategoryDetailViewProps {
-  category: Category;
+  category: Category ;
   onBack: () => void;
   onUpdateCategory: (category: Category) => void;
 }
