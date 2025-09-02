@@ -17,6 +17,7 @@ import DeleteConfirmModal from './utils/DeleteConfirmModel';
 import axios from 'axios';
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 import { useRouter } from 'next/navigation';
+import { Category } from './utils/types';
 
 interface Task {
   id: string; // Changed from number to string (taskId from API)
@@ -52,13 +53,7 @@ interface Subcategory {
     lastName: string;
   };
 }
-interface Category {
-  id: number;
-  name: string;
-  description?: string;
-  subcategories: Subcategory[];
-  directTasks: Task[];
-}
+
 
 export default function NormalTasks() {
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -143,7 +138,10 @@ export default function NormalTasks() {
         ...newCategory,
         id: Date.now(),
         subcategories: [],
-        directTasks: []
+        directTasks: [],
+        taskId: '',
+        parameterType: '',
+        assignedTo: []
       };
       setCategories(prevCategories => [...prevCategories, categoryWithId]);
       setShowCreateCategoryModal(false);

@@ -243,7 +243,7 @@ export default function Layout({ children }: LayoutProps) {
         </div>
 
         {/* Page content */}
-        <main className="p-6">
+        <main className="p-6 bg-white">
           {children}
         </main>
       </div>
