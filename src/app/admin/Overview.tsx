@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, SetStateAction } from 'react';
 import { 
   MagnifyingGlassIcon,
   FunnelIcon,
@@ -12,94 +12,197 @@ import {
   EyeIcon,
   XMarkIcon
 } from '@heroicons/react/24/outline';
+import axios from 'axios';
 
 export default function Overview() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('All Tasks');
-  const [selectedTask, setSelectedTask] = useState(null);
-  const [showTaskDetail, setShowTaskDetail] = useState(false);
+  type TaskUpdate = {
+    id: string;
+    name: string;
+    description: string;
+    category: string;
+    subCategory: null;
+    completionRate: number;
+    completedTasks: number;
+    totalTasks: number;
+    assignee: string;
+    taskType: string;
+  };
 
-  // Sample data - replace with your actual data
+  const [selectedTask, setSelectedTask] = useState<TaskUpdate | null>(null);
+  const [showTaskDetail, setShowTaskDetail] = useState(false);
+  
+  // State for API data
+  const [dashboardSummary, setDashboardSummary] = useState({
+    totalAssignedTasks: 0,
+    pending: 0,
+    completed: 0,
+    adhoc: 0
+  });
+  type Assignee = {
+    name: string;
+    completionRate: number;
+    completed: number;
+    total: number;
+  };
+
+  type CategorySummaryItem = {
+    category: string;
+    assignees: Assignee[];
+  };
+
+  const [categorySummary, setCategorySummary] = useState<CategorySummaryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+
+  // Function to fetch dashboard summary
+  const fetchDashboardSummary = async () => {
+    try {
+      const response = await axios.get(`${backendUrl}/api/dashboard/summary`, {
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      if (response.data.success) {
+        setDashboardSummary(response.data.data);
+      } else {
+        throw new Error(response.data.message || 'Failed to fetch dashboard summary');
+      }
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err instanceof Error ? err.message : String(err));
+      } else {
+        setError('An unknown error occurred');
+      }
+      console.error('Error fetching dashboard summary:', err);
+    }
+  };
+
+  // Function to fetch category summary
+  const fetchCategorySummary = async () => {
+    try {
+      const response = await axios.get(`${backendUrl}/api/dashboard/category-summary`, {
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.data.success) {
+        setCategorySummary(response.data.data);
+      } else {
+        throw new Error(response.data.message || 'Failed to fetch category summary');
+      }
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err instanceof Error ? err.message : String(err));
+      } else {
+        setError('An unknown error occurred');
+      }
+      console.error('Error fetching category summary:', err);
+    }
+  };
+
+  // Fetch data on component mount
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        await Promise.all([
+          fetchDashboardSummary(),
+          fetchCategorySummary()
+        ]);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // Transform API data to match your component's expected format
   const statsData = [
     {
       title: 'Total assigned tasks',
-      value: '54',
+      value: dashboardSummary.totalAssignedTasks.toString(),
       icon: Squares2X2Icon,
       bgColor: 'bg-blue-50',
       iconColor: 'text-blue-600',
     },
     {
       title: 'Total pending tasks',
-      value: '10',
+      value: dashboardSummary.pending.toString(),
       icon: ClockIcon,
       bgColor: 'bg-yellow-50',
       iconColor: 'text-yellow-600',
     },
     {
       title: 'Completed Tasks',
-      value: '6',
+      value: dashboardSummary.completed.toString(),
       icon: CheckCircleIcon,
       bgColor: 'bg-green-50',
       iconColor: 'text-green-600',
     },
     {
       title: 'Total Ad-hoc task created',
-      value: '3',
+      value: dashboardSummary.adhoc.toString(),
       icon: PlusIcon,
       bgColor: 'bg-purple-50',
       iconColor: 'text-purple-600',
     },
   ];
 
-  const taskUpdates = [
-    {
-      id: 1,
-      name: 'Fire equipment check and maintenance',
-      description: 'Check all fire safety equipment including extinguishers, alarms, and emergency exits',
-      category: 'Fire Safety Checklist',
-      subCategory: 'Fire Prevention',
-      completionRate: 75,
-      completedTasks: 24,
-      totalTasks: 32,
-      assignee: 'Ritesh Sah',
-      taskType: 'normal'
-    },
-    {
-      id: 2,
-      name: 'Emergency evacuation drill',
-      description: 'Conduct monthly fire safety evacuation drill for all employees',
-      category: 'Fire Safety Checklist', 
-      subCategory: 'Emergency Response',
-      completionRate: 60,
-      completedTasks: 19,
-      totalTasks: 32,
-      assignee: 'Ankit Raj',
-      taskType: 'normal'
-    },
-    {
-      id: 3,
-      name: 'Urgent server maintenance',
-      description: 'Emergency maintenance required for server room cooling system',
-      category: null,
+  // Transform category summary data to task updates format
+  const taskUpdates = categorySummary.flatMap((category, categoryIndex) => 
+    category.assignees.map((assignee, assigneeIndex) => ({
+      id: `${categoryIndex}-${assigneeIndex}`,
+      name: category.category,
+      description: `Category: ${category.category}`,
+      category: category.category,
       subCategory: null,
-      completionRate: 55,
-      completedTasks: 17,
-      totalTasks: 32,
-      assignee: 'Shivam Kumar',
-      taskType: 'ad-hoc'
-    },
-  ];
+      completionRate: assignee.completionRate,
+      completedTasks: assignee.completed,
+      totalTasks: assignee.total,
+      assignee: assignee.name,
+      taskType: 'normal'
+    }))
+  );
+
+  // Filter tasks based on search and filter
+  const filteredTasks = taskUpdates.filter(task => {
+    const matchesSearch = task.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         task.assignee.toLowerCase().includes(searchTerm.toLowerCase());
+
+    let matchesFilter = false;
+    if (selectedFilter === 'All Tasks') {
+      matchesFilter = true;
+    } else if (selectedFilter === 'Normal') {
+      matchesFilter = task.taskType === 'normal';
+    } else if (selectedFilter === 'Ad-hoc') {
+      matchesFilter = task.taskType === 'ad-hoc';
+    } else if (selectedFilter === 'Completed') {
+      matchesFilter = task.completionRate === 100;
+    }
+
+    return matchesSearch && matchesFilter;
+  });
 
   const clearSearch = () => {
     setSearchTerm('');
   };
 
-  const handleCategoryClick = (task) => {
+  const handleCategoryClick = (task: TaskUpdate) => {
     setSelectedTask(task);
     setShowTaskDetail(true);
   };
 
-  const getTaskTypeBadge = (taskType) => {
+  const getTaskTypeBadge = (taskType: string) => {
     return taskType === 'ad-hoc' ? (
       <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
         Ad-hoc
@@ -111,7 +214,7 @@ export default function Overview() {
     );
   };
 
-  const CircularProgress = ({ percentage }) => {
+  const CircularProgress = ({ percentage }: { percentage: number }) => {
     const radius = 20;
     const circumference = 2 * Math.PI * radius;
     const strokeDasharray = circumference;
@@ -150,8 +253,53 @@ export default function Overview() {
     );
   };
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl shadow-lg border border-gray-100 p-6">
+          <div className="flex items-center space-x-3">
+            <div className="bg-blue-100 p-3 rounded-lg animate-pulse">
+              <Squares2X2Icon className="w-6 h-6 text-blue-600" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
+              <p className="text-sm text-gray-600 mt-1">Loading...</p>
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1,2,3,4].map((i) => (
+            <div key={i} className="bg-white rounded-xl shadow-lg border border-gray-100 p-6 animate-pulse">
+              <div className="h-4 bg-gray-200 rounded w-3/4 mb-4"></div>
+              <div className="h-8 bg-gray-200 rounded w-1/2"></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+          <div className="flex items-center space-x-3">
+            <XMarkIcon className="w-6 h-6 text-red-600" />
+            <div>
+              <h3 className="text-lg font-semibold text-red-800">Error Loading Dashboard</h3>
+              <p className="text-sm text-red-600 mt-1">{error}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {/* Rest of your existing JSX remains the same, but use filteredTasks instead of taskUpdates */}
       {/* Enhanced Header with gradient background */}
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl shadow-lg border border-gray-100 p-6">
         <div className="flex items-center space-x-3">
@@ -201,7 +349,7 @@ export default function Overview() {
             </div>
             <div className="flex items-center space-x-2">
               <div className="bg-white px-3 py-1 rounded-full shadow-sm">
-                <span className="text-sm font-medium text-gray-700">{taskUpdates.length} tasks</span>
+                <span className="text-sm font-medium text-gray-700">{filteredTasks.length} tasks</span>
               </div>
             </div>
           </div>
@@ -257,7 +405,7 @@ export default function Overview() {
                   </tr>
                 </thead>
                 <tbody className="bg-white">
-                  {taskUpdates.map((task, index) => (
+                  {filteredTasks.map((task, index) => (
                     <tr key={task.id} className="border-b border-gray-100 hover:bg-blue-50 transition-colors duration-150">
                       <td className="py-4 px-6">
                         <div className="space-y-2">
@@ -302,7 +450,7 @@ export default function Overview() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-6 gap-4">
             <div className="flex items-center space-x-2">
               <span className="text-sm text-gray-600">
-                Showing <span className="font-medium">{taskUpdates.length}</span> of <span className="font-medium">{taskUpdates.length}</span> tasks
+                Showing <span className="font-medium">{filteredTasks.length}</span> of <span className="font-medium">{taskUpdates.length}</span> tasks
               </span>
               {searchTerm && (
                 <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
@@ -370,7 +518,7 @@ export default function Overview() {
               </div>
             </div>
           </div>
-        </div>
+        </div> 
       )}
     </div>
   );

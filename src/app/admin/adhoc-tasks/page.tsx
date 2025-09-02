@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, } from 'react';
 import { 
   MagnifyingGlassIcon,
   FunnelIcon,
@@ -10,7 +10,6 @@ import {
   PencilIcon,
   TrashIcon,
   CheckCircleIcon,
-  ClockIcon,
   CalendarDaysIcon,
   UserIcon,
   ExclamationTriangleIcon,
@@ -28,18 +27,13 @@ interface User {
   email: string;
 }
 
-interface MembersApiResponse {
-  success: boolean;
-  message: string;
-  data: User[];
-}
 
 interface Assignment {
   assignmentId: string;
   status: string;
-  parameterValue: any;
-  comment: any;
-  completedAt: any;
+  parameterValue: unknown;
+  comment: unknown;
+  completedAt: unknown;
   assignedTo: {
     id: string;
     fullName: string;
@@ -51,6 +45,10 @@ interface Assignment {
 
 // Updated Task interface to match your API response
 interface Task {
+  createdAt: unknown;
+  parameterIsRequired: unknown;
+  parameterType: string;
+  dropdownOptions: unknown;
   taskId: string; // Use taskId instead of id
   title: string;
   description?: string;
@@ -64,12 +62,6 @@ interface Task {
   // Remove the old interface fields that don't match your API
 }
 
-
-interface ApiResponse {
-  success: boolean;
-  message: string;
-  data: Task[];
-}
 
 interface CreateTaskForm {
   title: string;
@@ -176,7 +168,7 @@ export default function AdHocTasks() {
         console.error('Tasks data is not an array:', tasksData);
         setTasks([]);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to fetch tasks:', error);
       setError('Failed to fetch tasks. Please try again.');
       setTasks([]);
@@ -200,7 +192,7 @@ export default function AdHocTasks() {
         console.error('Members data is not an array:', membersData);
         setMembers([]);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to fetch members:', error);
       setMembers([]);
     }
@@ -263,7 +255,7 @@ export default function AdHocTasks() {
       dueDate: ''
     });
     fetchTasks();
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to create task:', error);
     setError('Failed to create task. Please try again.');
   }
@@ -286,7 +278,7 @@ export default function AdHocTasks() {
     };
 
     // Use taskId if available, otherwise fall back to id
-    const taskIdToUse = selectedTask.taskId || selectedTask.id;
+    const taskIdToUse = selectedTask.taskId ;
     
     await axios.patch(`${backendUrl}/api/tasks/${taskIdToUse}`, updateData, {
       withCredentials: true,
@@ -298,7 +290,7 @@ export default function AdHocTasks() {
     setShowEditModal(false);
     setSelectedTask(null);
     fetchTasks();
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to update task:', error);
     setError('Failed to update task. Please try again.');
   }
@@ -311,7 +303,7 @@ export default function AdHocTasks() {
 
   try {
     // Use taskId if available, otherwise fall back to id
-    const taskIdToUse = selectedTask.taskId || selectedTask.id;
+    const taskIdToUse = selectedTask.taskId ;
     
     await axios.delete(`${backendUrl}/api/tasks/${taskIdToUse}`, {
       withCredentials: true
@@ -320,7 +312,7 @@ export default function AdHocTasks() {
     setShowDeleteConfirm(false);
     setSelectedTask(null);
     fetchTasks();
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to delete task:', error);
     setError('Failed to delete task. Please try again.');
   }
@@ -334,7 +326,7 @@ export default function AdHocTasks() {
     setAssignLoading(true);
     
     // Use taskId if available, otherwise fall back to id
-    const taskIdToUse = selectedTask.taskId || selectedTask.id;
+    const taskIdToUse = selectedTask.taskId ;
     
     const assignmentData = {
       userIds: selectedMembers,
@@ -354,7 +346,7 @@ export default function AdHocTasks() {
     setSelectedTask(null);
     setSelectedMembers([]);
     fetchTasks(); // Refresh to get updated assignments
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to assign members:', error);
     setError('Failed to assign members. Please try again.');
   } finally {
@@ -375,14 +367,14 @@ export default function AdHocTasks() {
   const handleTaskClick = async (task: Task) => {
   try {
     // Use taskId if available, otherwise fall back to id
-    const taskIdToUse = task.taskId || task.id;
+    const taskIdToUse = task.taskId ;
     
     const response = await axios.get(`${backendUrl}/api/tasks/${taskIdToUse}`, {
       withCredentials: true
     });
     setSelectedTask(response.data.data || task);
     setShowTaskDetail(true);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to fetch task details:', error);
     setSelectedTask(task);
     setShowTaskDetail(true);
@@ -396,7 +388,7 @@ export default function AdHocTasks() {
       description: task.description || '',
       parameterLabel: task.parameterLabel,
       parameterUnit: task.parameterUnit || '',
-      dropdownOptions: task.dropdownOptions ? task.dropdownOptions.join(', ') : '',
+      dropdownOptions: Array.isArray(task.dropdownOptions) ? task.dropdownOptions.join(', ') : '',
       dueDate: task.dueDate || ''
     });
     setShowEditModal(true);
@@ -439,7 +431,7 @@ const getAssignedMembers = (task: Task) => {
 
 
 
-  const formatDate = (dateString: string | null) => {
+  const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleDateString();
   };
@@ -559,8 +551,8 @@ const getAssignedMembers = (task: Task) => {
         <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-shadow duration-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600 mb-2">Total Tasks</p>
-              <p className="text-3xl font-bold text-gray-900">{tasks.length}</p>
+              <p className="text-sm font-medium text-gray-600 mb-2">Completed Ad-hoc Tasks</p>
+              <p className="text-3xl font-bold text-gray-900">0</p>
             </div>
             <div className="flex items-center justify-center w-12 h-12 bg-green-50 rounded-lg">
               <CheckCircleIcon className="w-6 h-6 text-green-600" />
@@ -667,9 +659,7 @@ const getAssignedMembers = (task: Task) => {
                                 {task.description}
                               </div>
                             )}
-                            <div className="text-xs text-gray-400 mt-1">
-                              Created by: {task.createdBy}
-                            </div>
+                           
                           </button>
                         </td>
                         <td className="py-4 px-6">
@@ -741,7 +731,7 @@ const getAssignedMembers = (task: Task) => {
 
       {/* Create Task Modal - Updated with Required Fields */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-gray-200 p-6 rounded-t-xl">
               <div className="flex justify-between items-center">
@@ -764,7 +754,7 @@ const getAssignedMembers = (task: Task) => {
                   type="text"
                   value={createForm.title}
                   onChange={(e) => setCreateForm({...createForm, title: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                  className="w-full border border-gray-300 text-black rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                   placeholder="Enter task title..."
                 />
               </div>
@@ -775,7 +765,7 @@ const getAssignedMembers = (task: Task) => {
                   value={createForm.description}
                   onChange={(e) => setCreateForm({...createForm, description: e.target.value})}
                   rows={3}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 resize-none"
+                  className="w-full border text-black border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 resize-none"
                   placeholder="Enter task description..."
                 />
               </div>
@@ -786,7 +776,7 @@ const getAssignedMembers = (task: Task) => {
                   type="date"
                   value={createForm.dueDate}
                   onChange={(e) => setCreateForm({...createForm, dueDate: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                  className="w-full border text-black border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                 />
               </div>
 
@@ -796,7 +786,7 @@ const getAssignedMembers = (task: Task) => {
                   type="text"
                   value={createForm.parameterLabel}
                   onChange={(e) => setCreateForm({...createForm, parameterLabel: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                  className="w-full border text-black border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                   placeholder="e.g., Temperature Reading, Count, etc."
                 />
               </div>
@@ -805,8 +795,8 @@ const getAssignedMembers = (task: Task) => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Parameter Type *</label>
                 <select
                   value={createForm.parameterType}
-                  onChange={(e) => setCreateForm({...createForm, parameterType: e.target.value as any})}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  onChange={(e) => setCreateForm({...createForm, parameterType: e.target.value as CreateTaskForm['parameterType']})}
+                  className="w-full border text-black border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="TEXT">Text</option>
                   <option value="NUMBER">Number</option>
@@ -824,7 +814,7 @@ const getAssignedMembers = (task: Task) => {
                     type="text"
                     value={createForm.parameterUnit}
                     onChange={(e) => setCreateForm({...createForm, parameterUnit: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                    className="w-full border text-black border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                     placeholder="e.g., °C, kg, units, etc."
                   />
                 </div>
@@ -837,7 +827,7 @@ const getAssignedMembers = (task: Task) => {
                     type="text"
                     value={createForm.dropdownOptions}
                     onChange={(e) => setCreateForm({...createForm, dropdownOptions: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                    className="w-full border text-black border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                     placeholder="Option 1, Option 2, Option 3"
                   />
                   <p className="text-xs text-gray-500 mt-1">Separate options with commas</p>
@@ -868,7 +858,7 @@ const getAssignedMembers = (task: Task) => {
 
       {/* Assign Members Modal */}
       {showAssignModal && selectedTask && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-gray-200 p-6 rounded-t-xl">
               <div className="flex justify-between items-center">
@@ -978,7 +968,7 @@ const getAssignedMembers = (task: Task) => {
       {/* Keep all your existing modals (Edit, Delete, Task Detail) with the same structure but use taskId instead of id */}
       {/* Task Detail Modal */}
 {showTaskDetail && selectedTask && (
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+  <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-4">
     <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
       <div className="sticky top-0 bg-white border-b border-gray-200 p-6 rounded-t-xl">
         <div className="flex justify-between items-center">
@@ -1017,19 +1007,19 @@ const getAssignedMembers = (task: Task) => {
         </div>
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-2">Parameter Details</label>
-          <div className="bg-gray-50 p-3 rounded-lg space-y-2">
+          <div className="bg-gray-50 text-black p-3 rounded-lg space-y-2">
             <p><strong>Label:</strong> {selectedTask.parameterLabel}</p>
             <p><strong>Type:</strong> {selectedTask.parameterType}</p>
             {selectedTask.parameterUnit && (
               <p><strong>Unit:</strong> {selectedTask.parameterUnit}</p>
             )}
             <p><strong>Required:</strong> {selectedTask.parameterIsRequired ? 'Yes' : 'No'}</p>
-            {selectedTask.dropdownOptions && selectedTask.dropdownOptions.length > 0 && (
+            {Array.isArray(selectedTask.dropdownOptions) && selectedTask.dropdownOptions.length > 0 && (
               <div>
                 <p><strong>Options:</strong></p>
                 <ul className="list-disc list-inside ml-4">
                   {selectedTask.dropdownOptions.map((option, index) => (
-                    <li key={index}>{option}</li>
+                    <li key={index}>{String(option)}</li>
                   ))}
                 </ul>
               </div>
@@ -1043,7 +1033,9 @@ const getAssignedMembers = (task: Task) => {
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-2">Created Date</label>
           <p className="text-gray-900 bg-gray-50 p-3 rounded-lg">
-            {selectedTask.createdAt ? new Date(selectedTask.createdAt).toLocaleDateString() + ' at ' + new Date(selectedTask.createdAt).toLocaleTimeString() : 'Date not available'}
+            {(typeof selectedTask.createdAt === 'string' || typeof selectedTask.createdAt === 'number' || selectedTask.createdAt instanceof Date)
+              ? new Date(selectedTask.createdAt).toLocaleDateString() + ' at ' + new Date(selectedTask.createdAt).toLocaleTimeString()
+              : 'Date not available'}
           </p>
         </div>
         
@@ -1067,7 +1059,7 @@ const getAssignedMembers = (task: Task) => {
 
 {/* Edit Task Modal - Fixed with taskId */}
 {showEditModal && selectedTask && (
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+  <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-4">
     <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
       <div className="sticky top-0 bg-white border-b border-gray-200 p-6 rounded-t-xl">
         <div className="flex justify-between items-center">
@@ -1090,7 +1082,7 @@ const getAssignedMembers = (task: Task) => {
             type="text"
             value={editForm.title}
             onChange={(e) => setEditForm({...editForm, title: e.target.value})}
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+            className="w-full border text-black border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
             placeholder="Enter task title..."
           />
         </div>
@@ -1101,7 +1093,7 @@ const getAssignedMembers = (task: Task) => {
             value={editForm.description}
             onChange={(e) => setEditForm({...editForm, description: e.target.value})}
             rows={3}
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 resize-none"
+            className="w-full border text-black border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 resize-none"
             placeholder="Enter task description..."
           />
         </div>
@@ -1112,7 +1104,7 @@ const getAssignedMembers = (task: Task) => {
             type="date"
             value={editForm.dueDate}
             onChange={(e) => setEditForm({...editForm, dueDate: e.target.value})}
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+            className="w-full border text-black border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
           />
         </div>
         
@@ -1122,7 +1114,7 @@ const getAssignedMembers = (task: Task) => {
             type="text"
             value={editForm.parameterLabel}
             onChange={(e) => setEditForm({...editForm, parameterLabel: e.target.value})}
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+            className="w-full border text-black border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
             placeholder="e.g., Temperature Reading, Count, etc."
           />
         </div>
@@ -1133,7 +1125,7 @@ const getAssignedMembers = (task: Task) => {
             type="text"
             value={editForm.parameterUnit}
             onChange={(e) => setEditForm({...editForm, parameterUnit: e.target.value})}
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+            className="w-full border text-black border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
             placeholder="e.g., °C, kg, units, etc."
           />
         </div>
@@ -1145,7 +1137,7 @@ const getAssignedMembers = (task: Task) => {
               type="text"
               value={editForm.dropdownOptions}
               onChange={(e) => setEditForm({...editForm, dropdownOptions: e.target.value})}
-              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+              className="w-full border text-black border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
               placeholder="Option 1, Option 2, Option 3"
             />
             <p className="text-xs text-gray-500 mt-1">Separate options with commas</p>
@@ -1182,7 +1174,7 @@ const getAssignedMembers = (task: Task) => {
 
 {/* Delete Confirmation Modal - Fixed with taskId */}
 {showDeleteConfirm && selectedTask && (
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+  <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-4">
     <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
       <div className="border-b border-gray-200 p-6">
         <div className="flex justify-between items-center">
@@ -1203,7 +1195,7 @@ const getAssignedMembers = (task: Task) => {
       
       <div className="p-6">
         <p className="text-gray-600 mb-6">
-          Are you sure you want to delete <strong>"{selectedTask.title}"</strong>? This action cannot be undone and will permanently remove this task and all its data.
+          Are you sure you want to delete <strong>&quot;{selectedTask.title}&quot;</strong>? This action cannot be undone and will permanently remove this task and all its data.
         </p>
 
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-6">

@@ -5,26 +5,28 @@ import { XMarkIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+import { Subcategory } from './types';
 
-interface Subcategory {
-  id: string;
-  name: string;
-  description?: string;
-  categoryId: string;
-  createdAt?: string;
-  updatedAt?: string;
-  createdBy?: string;
-  tasks: unknown[];
-  category?: {
-    id: string;
-    name: string;
-  };
-  createdByUser?: {
-    id: string;
-    firstName: string;
-    lastName: string;
-  };
-}
+
+// interface Subcategory {
+//   id: string;
+//   name: string;
+//   description?: string;
+//   categoryId: string;
+//   createdAt?: string;
+//   updatedAt?: string;
+//   createdBy?: string;
+//   tasks: unknown[];
+//   category?: {
+//     id: string;
+//     name: string;
+//   };
+//   createdByUser?: {
+//     id: string;
+//     firstName: string;
+//     lastName: string;
+//   };
+// }
 
 interface EditSubcategoryModalProps {
   subcategory: Subcategory;
@@ -117,7 +119,7 @@ export default function EditSubcategoryModal({ subcategory, onClose, onUpdateSub
               value={name}
               onChange={(e) => setName(e.target.value)}
               disabled={isLoading}
-              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:bg-gray-100 disabled:cursor-not-allowed"
+              className="w-full border text-black border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:bg-gray-100 disabled:cursor-not-allowed"
               placeholder="Enter subcategory name..."
             />
           </div>
@@ -131,7 +133,7 @@ export default function EditSubcategoryModal({ subcategory, onClose, onUpdateSub
               onChange={(e) => setDescription(e.target.value)}
               disabled={isLoading}
               rows={3}
-              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:bg-gray-100 disabled:cursor-not-allowed"
+              className="w-full border text-black border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:bg-gray-100 disabled:cursor-not-allowed"
               placeholder="Enter subcategory description..."
             />
           </div>

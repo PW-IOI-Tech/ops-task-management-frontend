@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { XMarkIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
+import { Category } from './types';
 
-interface Category {
-  id: number;
-  name: string;
-  subcategories: any[];
-  directTasks: any[];
-}
+// interface Category {
+//   id: number;
+//   name: string;
+//   subcategories: Subcategory[];
+//   directTasks: any[];
+// }
 
 interface EditCategoryModalProps {
   category: Category;
@@ -57,7 +58,7 @@ export default function EditCategoryModal({ category, onClose, onUpdateCategory 
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+              className="w-full border text-black border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
               placeholder="Enter category name..."
             />
           </div>

@@ -12,7 +12,8 @@ import {
   UserIcon,
   PencilIcon,
   TrashIcon,
-  MagnifyingGlassIcon
+  MagnifyingGlassIcon,
+  UserPlusIcon
 } from '@heroicons/react/24/outline';
 import CreateTaskModal from './CreateTaskModel';
 import CreateSubcategoryModal from './CreateSubCategoryModel';
@@ -20,53 +21,16 @@ import EditTaskModal from './EditTaskModel';
 import EditSubcategoryModal from './EditSubcategoryModel';
 import DeleteConfirmModal from './DeleteConfirmModel';
 import axios from 'axios';
+import AssignMemberModal from './AssignMemberModel';
+import TaskViewModal from './TaskViewModel';
+import { ParameterType, Task,Subcategory, Category } from './types';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 // ✅ Updated Task interface to match API response
-interface Task {
-  id: string; // Changed from number to string (taskId from API)
-  title: string;
-  description: string | null;
-  taskType: 'ADHOC' | 'RECURRING';
-  category?: string;
-  subcategory?: string;
-  parameterLabel: string;
-  parameterUnit?: string | null;
-  dueDate?: string | null;
-  isAssigned: boolean;
-  assignments: unknown[];
-  createdBy: string;
-  status?: 'pending' | 'completed'; // Default status if not in API
-}
 
-interface Subcategory {
-  id: string;
-  name: string;
-  description?: string;
-  categoryId: string;
-  createdAt?: string;
-  updatedAt?: string;
-  createdBy?: string;
-  tasks: Task[];
-  category?: {
-    id: string;
-    name: string;
-  };
-  createdByUser?: {
-    id: string;
-    firstName: string;
-    lastName: string;
-  };
-}
 
-interface Category {
-  id: number;
-  name: string;
-  description?: string;
-  subcategories: Subcategory[];
-  directTasks: Task[];
-}
+
 
 interface CategoryDetailViewProps {
   category: Category;
@@ -87,9 +51,14 @@ export default function CategoryDetailView({ category, onBack, onUpdateCategory 
   const [deleteType, setDeleteType] = useState<'task' | 'subcategory'>('task');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
+  const [showAssignModal, setShowAssignModal] = useState<boolean>(false);
+const [taskToAssign, setTaskToAssign] = useState<Task | null>(null);
+const [showTaskViewModal, setShowTaskViewModal] = useState<boolean>(false);
+const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+
 
   // ✅ Helper function to organize tasks from API response
-  const organizeTasks = (tasks: any[], category: Category): Category => {
+  const organizeTasks = (tasks: Task[], category: Category): Category => {
     const categoryName = category.name;
     const organizedCategory: Category = {
       ...category,
@@ -114,9 +83,12 @@ export default function CategoryDetailView({ category, onBack, onUpdateCategory 
           parameterUnit: apiTask.parameterUnit,
           dueDate: apiTask.dueDate,
           isAssigned: apiTask.isAssigned,
-          assignments: apiTask.assignments || [],
+          assignedTo: apiTask.assignedTo || [],
           createdBy: apiTask.createdBy,
           status: 'pending' // Default status since not in API response
+          ,
+          taskId: apiTask.taskId,
+          parameterType: apiTask.parameterType as ParameterType
         };
 
         if (apiTask.subcategory) {
@@ -142,6 +114,39 @@ export default function CategoryDetailView({ category, onBack, onUpdateCategory 
     return organizedCategory;
   };
 
+  const handleAssignMember = (task: Task, e: React.MouseEvent<HTMLButtonElement>) => {
+  e.stopPropagation();
+  setTaskToAssign(task);
+  setShowAssignModal(true);
+};
+
+
+
+const handleAssignMembers = (memberIds: string[]) => {
+  // Handle successful assignment - you can show a success message
+  console.log('Members assigned successfully:', memberIds);
+  // Optionally refresh the task data
+  window.location.reload();
+};
+
+const handleTaskClick = (taskId: string) => {
+  setSelectedTaskId(taskId);
+  setShowTaskViewModal(true);
+};
+
+// const getAssignedMemberText = (task: Task): string => {
+//   if (task.assignedTo && task.assignedTo.length > 0) {
+//     if (task.assignedTo.length === 1) {
+//       const member = task.assignedTo[0];
+//       return `${member.firstName} ${member.lastName}`;
+//     } else {
+//       return `${task.assignedTo.length} members assigned`;
+//     }
+//   }
+//   return task.createdBy || 'Unassigned';
+// };
+
+
   const deleteTask = async (taskId: string) => {
   try {
     await axios.delete(`${backendUrl}/api/tasks/${taskId}`, {
@@ -155,27 +160,6 @@ export default function CategoryDetailView({ category, onBack, onUpdateCategory 
     throw error;
   }
 };
-
-  const handleCreateTask = (taskData: Partial<Task>, subcategoryId: number | string | null = null) => {
-    const newTask: Task = {
-      ...taskData as Task,
-      id: Date.now().toString(), // Convert to string
-      status: 'pending',
-    };
-
-    const updatedCategory = { ...category };
-    
-    if (subcategoryId) {
-      const subcategoryIndex = updatedCategory.subcategories.findIndex(sub => sub.id === subcategoryId);
-      if (subcategoryIndex !== -1) {
-        updatedCategory.subcategories[subcategoryIndex].tasks.push(newTask);
-      }
-    } else {
-      updatedCategory.directTasks.push(newTask);
-    }
-
-    onUpdateCategory(updatedCategory);
-  };
 
   const createSubcategory = async (subcategoryData: { name: string; description?: string }) => {
     try {
@@ -222,7 +206,7 @@ export default function CategoryDetailView({ category, onBack, onUpdateCategory 
             withCredentials: true,
             headers: { 'Content-Type': 'application/json' }
           }),
-          axios.get(`${backendUrl}/api/tasks`, {
+          axios.get(`${backendUrl}/api/tasks?taskType=RECURRING`, {
             withCredentials: true,
             headers: { 'Content-Type': 'application/json' }
           })
@@ -288,30 +272,6 @@ export default function CategoryDetailView({ category, onBack, onUpdateCategory 
     setTaskToEdit(task);
     setTaskContext(context);
     setShowEditTaskModal(true);
-  };
-
-  const handleUpdateTask = (updatedTask: Task) => {
-    const updatedCategory = { ...category };
-    
-    if (taskContext === 'direct') {
-      const taskIndex = updatedCategory.directTasks.findIndex(task => task.id === updatedTask.id);
-      if (taskIndex !== -1) {
-        updatedCategory.directTasks[taskIndex] = updatedTask;
-      }
-    } else {
-      const subcategoryIndex = updatedCategory.subcategories.findIndex(sub => sub.id === taskContext);
-      if (subcategoryIndex !== -1) {
-        const taskIndex = updatedCategory.subcategories[subcategoryIndex].tasks.findIndex(task => task.id === updatedTask.id);
-        if (taskIndex !== -1) {
-          updatedCategory.subcategories[subcategoryIndex].tasks[taskIndex] = updatedTask;
-        }
-      }
-    }
-
-    onUpdateCategory(updatedCategory);
-    setShowEditTaskModal(false);
-    setTaskToEdit(null);
-    setTaskContext('');
   };
 
   const handleDeleteItem = (item: Task | Subcategory, type: 'task' | 'subcategory', context: string | number, e: React.MouseEvent<HTMLButtonElement>) => {
@@ -448,7 +408,7 @@ export default function CategoryDetailView({ category, onBack, onUpdateCategory 
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 bg-white">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl shadow-lg border border-gray-100 p-6">
         <div className="flex items-center justify-between">
@@ -531,6 +491,7 @@ export default function CategoryDetailView({ category, onBack, onUpdateCategory 
                   <div
                     key={task.id}
                     className="bg-gray-50 border border-gray-200 rounded-lg p-4 hover:shadow-md hover:border-blue-300 transition-all duration-200 relative"
+                    onClick={() => handleTaskClick(task.id)}
                   >
                     <div className="absolute top-3 right-3 flex items-center space-x-1 bg-white rounded-lg shadow-sm border border-gray-200">
                       <button
@@ -541,6 +502,13 @@ export default function CategoryDetailView({ category, onBack, onUpdateCategory 
                         <PencilIcon className="w-3.5 h-3.5" />
                       </button>
                       <button
+    onClick={(e) => handleAssignMember(task, e)}
+    className="p-1.5 text-green-600 hover:bg-green-50 transition-colors border-r border-gray-200"
+    title="Assign Members"
+  >
+    <UserPlusIcon className="w-3.5 h-3.5" />
+  </button>
+                      <button
                         onClick={(e) => handleDeleteItem(task, 'task', 'direct', e)}
                         className="p-1.5 text-red-600 hover:bg-red-50 rounded-r-lg transition-colors"
                         title="Delete Task"
@@ -549,7 +517,7 @@ export default function CategoryDetailView({ category, onBack, onUpdateCategory 
                       </button>
                     </div>
 
-                    <div className="pr-16">
+                    <div className="pr-24">
                       <div className="flex items-start justify-between mb-3">
                         <h4 className="font-medium text-gray-900 text-sm line-clamp-2">{task.title}</h4>
                         <div className="ml-2 flex-shrink-0">
@@ -564,7 +532,16 @@ export default function CategoryDetailView({ category, onBack, onUpdateCategory 
                         </div>
                         <div className="flex items-center text-xs text-gray-500">
                           <UserIcon className="w-3 h-3 mr-1 flex-shrink-0" />
-                          <span className="truncate">{task.createdBy || 'Unknown'}</span>
+                          {task.assignedTo && task.assignedTo.length > 0 ? (
+                            <span className="truncate">
+                              {task.assignedTo.length === 1 
+                                ? `${task.assignedTo[0].firstName} ${task.assignedTo[0].lastName}`
+                                : `${task.assignedTo.length} members assigned`}
+                            </span>
+                          ) : (
+                            <span className="truncate">Unassigned</span>
+                          )}
+                        
                         </div>
                       </div>
                     </div>
@@ -621,6 +598,7 @@ export default function CategoryDetailView({ category, onBack, onUpdateCategory 
                       <div
                         key={task.id}
                         className="bg-gray-50 border border-gray-200 rounded-lg p-4 hover:shadow-md hover:border-indigo-300 transition-all duration-200 relative"
+                        onClick={() => handleTaskClick(task.id)}
                       >
                         <div className="absolute top-3 right-3 flex items-center space-x-1 bg-white rounded-lg shadow-sm border border-gray-200">
                           <button
@@ -631,6 +609,13 @@ export default function CategoryDetailView({ category, onBack, onUpdateCategory 
                             <PencilIcon className="w-3.5 h-3.5" />
                           </button>
                           <button
+    onClick={(e) => handleAssignMember(task, e)}
+    className="p-1.5 text-green-600 hover:bg-green-50 transition-colors border-r border-gray-200"
+    title="Assign Members"
+  >
+    <UserPlusIcon className="w-3.5 h-3.5" />
+  </button>
+                          <button
                             onClick={(e) => handleDeleteItem(task, 'task', subcategory.id, e)}
                             className="p-1.5 text-red-600 hover:bg-red-50 rounded-r-lg transition-colors"
                             title="Delete Task"
@@ -639,7 +624,7 @@ export default function CategoryDetailView({ category, onBack, onUpdateCategory 
                           </button>
                         </div>
 
-                        <div className="pr-16">
+                        <div className="pr-24">
                           <div className="flex items-start justify-between mb-3">
                             <h4 className="font-medium text-gray-900 text-sm line-clamp-2">{task.title}</h4>
                             <div className="ml-2 flex-shrink-0">
@@ -654,7 +639,15 @@ export default function CategoryDetailView({ category, onBack, onUpdateCategory 
                             </div>
                             <div className="flex items-center text-xs text-gray-500">
                               <UserIcon className="w-3 h-3 mr-1 flex-shrink-0" />
-                              <span className="truncate">{task.createdBy || 'Unknown'}</span>
+                               {task.assignedTo && task.assignedTo.length > 0 ? (
+                            <span className="truncate">
+                              {task.assignedTo.length === 1 
+                                ? `${task.assignedTo[0].firstName} ${task.assignedTo[0].lastName}`
+                                : `${task.assignedTo.length} members assigned`}
+                            </span>
+                          ) : (
+                            <span className="truncate">Unassigned</span>
+                          )}
                             </div>
                           </div>
                         </div>
@@ -798,6 +791,31 @@ export default function CategoryDetailView({ category, onBack, onUpdateCategory 
           }}
         />
       )}
+
+
+      {showAssignModal && taskToAssign && (
+  <AssignMemberModal
+    taskId={taskToAssign.id}
+    taskTitle={taskToAssign.title}
+    onClose={() => {
+      setShowAssignModal(false);
+      setTaskToAssign(null);
+    }}
+    onAssignMembers={handleAssignMembers}
+  />
+)}
+
+{showTaskViewModal && selectedTaskId && (
+  <TaskViewModal
+    taskId={selectedTaskId}
+    
+    onClose={() => {
+      setShowTaskViewModal(false);
+      setSelectedTaskId(null);
+    }}
+  />
+)}
+
     </div>
   );
 }
