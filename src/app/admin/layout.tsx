@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '../contexts/AuthContext'; // Import useAuth
+import { useAuth } from '../contexts/AuthContext'; 
+import { toast } from 'react-toastify';
 import { 
   HomeIcon, 
   ClipboardDocumentListIcon, 
@@ -27,6 +28,7 @@ export default function Layout({ children }: LayoutProps) {
   const handleLogout = async () => {
     try {
       await logout(); // This will handle the backend call and redirect
+      toast.success('Logged out successfully');
       setSidebarOpen(false); // Close mobile sidebar
     } catch (error) {
       console.error('Logout error:', error);

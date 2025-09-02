@@ -1,6 +1,7 @@
 export type ParameterType = 'NUMBER' | 'TEXT' | 'DATETIME' | 'DROPDOWN' | 'BOOLEAN' | 'COMMENT';
 
 export interface Task {
+ 
   taskId: string;
   id: string; // Changed from number to string (taskId from API)
   title: string;
@@ -14,6 +15,8 @@ export interface Task {
   dueDate?: string | null;
   isAssigned: boolean;
    assignedTo: TaskMember[];
+   dropdownOptions?: string[];
+   repetitionConfig : RepetitionConfig;
   createdBy: string;
   status?: 'pending' | 'completed'; // Default status if not in API
 }
@@ -56,3 +59,10 @@ export interface Category {
   assignedTo: string[];
 }
 
+export interface RepetitionConfig{
+     type: 'none' | 'interval' | 'weekly' | 'monthly';
+     days?: number;
+     onDays?: number[];
+     onDate?: number;
+     atTime?: string;
+   };

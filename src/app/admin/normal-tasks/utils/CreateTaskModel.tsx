@@ -10,19 +10,18 @@ const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 interface TaskFormData {
   title: string;
   description: string;
-  taskType: 'ADHOC' | 'RECURRING';
+  taskType: 'RECURRING'; // ✅ Fixed to only RECURRING
   parameterType: 'NUMBER' | 'TEXT' | 'DATETIME' | 'DROPDOWN' | 'BOOLEAN' | 'COMMENT';
   parameterLabel: string;
   parameterUnit: string;
   dropdownOptions: string;
-  dueDate: string;
   repetitionConfig: {
     type: 'interval' | 'weekly' | 'monthly';
     days?: number;
     onDays?: string[];
     onDate?: number;
     atTime: string;
-  } | null;
+  };
 }
 
 interface CreateTaskModalProps {
@@ -43,12 +42,11 @@ export default function CreateTaskModal({
   const [formData, setFormData] = useState<TaskFormData>({
     title: '',
     description: '',
-    taskType: 'RECURRING',
+    taskType: 'RECURRING', // ✅ Fixed to only RECURRING
     parameterType: 'NUMBER',
     parameterLabel: '',
     parameterUnit: '',
     dropdownOptions: '',
-    dueDate: '',
     repetitionConfig: {
       type: 'interval',
       days: 3,
@@ -59,13 +57,6 @@ export default function CreateTaskModal({
   const [weeklyDays, setWeeklyDays] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // ✅ Helper function to convert datetime-local to ISO string
-  const formatDateForAPI = (datetimeLocal: string): string => {
-    if (!datetimeLocal) return '';
-    const date = new Date(datetimeLocal);
-    return date.toISOString();
-  };
 
   const createTask = async (taskData: Record<string, unknown>) => {
     try {
@@ -100,26 +91,24 @@ export default function CreateTaskModal({
       // Prepare repetition config based on type
       let repetitionConfig = null;
       
-      if (formData.taskType === 'RECURRING') {
-        if (formData.repetitionConfig?.type === 'interval') {
-          repetitionConfig = {
-            type: 'interval',
-            days: formData.repetitionConfig.days,
-            atTime: formData.repetitionConfig.atTime
-          };
-        } else if (formData.repetitionConfig?.type === 'weekly') {
-          repetitionConfig = {
-            type: 'weekly',
-            onDays: weeklyDays,
-            atTime: formData.repetitionConfig.atTime
-          };
-        } else if (formData.repetitionConfig?.type === 'monthly') {
-          repetitionConfig = {
-            type: 'monthly',
-            onDate: formData.repetitionConfig.onDate,
-            atTime: formData.repetitionConfig.atTime
-          };
-        }
+      if (formData.repetitionConfig?.type === 'interval') {
+        repetitionConfig = {
+          type: 'interval',
+          days: formData.repetitionConfig.days,
+          atTime: formData.repetitionConfig.atTime
+        };
+      } else if (formData.repetitionConfig?.type === 'weekly') {
+        repetitionConfig = {
+          type: 'weekly',
+          onDays: weeklyDays,
+          atTime: formData.repetitionConfig.atTime
+        };
+      } else if (formData.repetitionConfig?.type === 'monthly') {
+        repetitionConfig = {
+          type: 'monthly',
+          onDate: formData.repetitionConfig.onDate,
+          atTime: formData.repetitionConfig.atTime
+        };
       }
 
       const taskPayload = {
@@ -127,18 +116,14 @@ export default function CreateTaskModal({
         description: formData.description || undefined,
         categoryId: categoryId?.toString(),
         subcategoryId: isSubcategoryTask ? subcategoryId : undefined,
-        taskType: formData.taskType,
+        taskType: 'RECURRING', // ✅ Always RECURRING
         parameterType: formData.parameterType,
         parameterLabel: formData.parameterLabel,
         parameterUnit: formData.parameterUnit || undefined,
         dropdownOptions: formData.parameterType === 'DROPDOWN' 
           ? formData.dropdownOptions.split(',').map(opt => opt.trim()).filter(Boolean)
           : undefined,
-        // ✅ Fixed: Convert datetime-local to ISO string format
-        dueDate: formData.taskType === 'ADHOC' && formData.dueDate 
-          ? formatDateForAPI(formData.dueDate) 
-          : undefined,
-        repetitionConfig: formData.taskType === 'RECURRING' ? repetitionConfig : undefined
+        repetitionConfig: repetitionConfig // ✅ Always include repetition config
       };
 
       // Remove undefined values
@@ -181,7 +166,7 @@ export default function CreateTaskModal({
         <div className="sticky top-0 bg-white border-b border-gray-200 p-6 rounded-t-xl">
           <div className="flex justify-between items-center">
             <h3 className="text-xl font-bold text-gray-800">
-              Create New Task {isSubcategoryTask ? '(in Subcategory)' : '(Direct Task)'}
+              Create New Recurring Task {isSubcategoryTask ? '(in Subcategory)' : '(Direct Task)'}
             </h3>
             <button 
               onClick={onClose} 
@@ -205,8 +190,6 @@ export default function CreateTaskModal({
               </div>
             </div>
           )}
-
-          {/* ✅ Removed Debug info section */}
 
           {/* Basic Information */}
           <div className="space-y-4">
@@ -238,38 +221,16 @@ export default function CreateTaskModal({
             </div>
           </div>
 
-          {/* Task Type */}
+          {/* ✅ Task Type - Now shows only recurring task info */}
           <div className="space-y-4">
             <h4 className="text-lg font-semibold text-gray-700 border-b pb-2">Task Configuration</h4>
             
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">Task Type *</label>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                  <input
-                    type="radio"
-                    name="taskType"
-                    value="ADHOC"
-                    checked={formData.taskType === 'ADHOC'}
-                    onChange={(e) => setFormData({...formData, taskType: e.target.value as 'ADHOC' | 'RECURRING'})}
-                    className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                    disabled={isLoading}
-                  />
-                  <span className="ml-2 text-sm font-medium text-gray-700">One-time Task</span>
-                </label>
-                <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                  <input
-                    type="radio"
-                    name="taskType"
-                    value="RECURRING"
-                    checked={formData.taskType === 'RECURRING'}
-                    onChange={(e) => setFormData({...formData, taskType: e.target.value as 'ADHOC' | 'RECURRING'})}
-                    className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                    disabled={isLoading}
-                  />
-                  <span className="ml-2 text-sm font-medium text-gray-700">Recurring Task</span>
-                </label>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center">
+                <CheckCircleIcon className="w-5 h-5 text-blue-600 mr-2" />
+                <span className="text-blue-800 font-medium">Recurring Task</span>
               </div>
+              <p className="text-blue-700 text-sm mt-1">This task will repeat based on the schedule you set below.</p>
             </div>
           </div>
 
@@ -338,127 +299,109 @@ export default function CreateTaskModal({
             )}
           </div>
 
-          {/* Schedule Configuration */}
+          {/* ✅ Schedule Configuration - Only for recurring tasks */}
           <div className="space-y-4">
             <h4 className="text-lg font-semibold text-gray-700 border-b pb-2">Schedule Configuration</h4>
             
-            {formData.taskType === 'ADHOC' && (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Repetition Type *</label>
+              <select
+                value={formData.repetitionConfig?.type || 'interval'}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  repetitionConfig: {
+                    ...formData.repetitionConfig!,
+                    type: e.target.value as 'interval' | 'weekly' | 'monthly'
+                  }
+                })}
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={isLoading}
+              >
+                <option value="interval">Every X Days</option>
+                <option value="weekly">Weekly (Specific Days)</option>
+                <option value="monthly">Monthly (Specific Date)</option>
+              </select>
+            </div>
+
+            {formData.repetitionConfig?.type === 'interval' && (
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Due Date *</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Repeat Every (Days) *</label>
                 <input
-                  type="datetime-local"
-                  required
-                  value={formData.dueDate}
-                  onChange={(e) => setFormData({...formData, dueDate: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 text-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={formData.repetitionConfig.days || 1}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    repetitionConfig: {
+                      ...formData.repetitionConfig!,
+                      days: parseInt(e.target.value) || 1
+                    }
+                  })}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 text-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   disabled={isLoading}
                 />
               </div>
             )}
 
-            {formData.taskType === 'RECURRING' && (
-              <>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Repetition Type *</label>
-                  <select
-                    value={formData.repetitionConfig?.type || 'interval'}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      repetitionConfig: {
-                        ...formData.repetitionConfig!,
-                        type: e.target.value as 'interval' | 'weekly' | 'monthly'
-                      }
-                    })}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-3 text-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    disabled={isLoading}
-                  >
-                    <option value="interval">Every X Days</option>
-                    <option value="weekly">Weekly (Specific Days)</option>
-                    <option value="monthly">Monthly (Specific Date)</option>
-                  </select>
+            {formData.repetitionConfig?.type === 'weekly' && (
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Select Days *</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {weekDays.map(day => (
+                    <label key={day.key} className="flex items-center p-2 border rounded cursor-pointer hover:bg-gray-50">
+                      <input
+                        type="checkbox"
+                        checked={weeklyDays.includes(day.key)}
+                        onChange={() => handleWeeklyDayToggle(day.key)}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        disabled={isLoading}
+                      />
+                      <span className="ml-2 text-sm text-gray-700">{day.label}</span>
+                    </label>
+                  ))}
                 </div>
-
-                {formData.repetitionConfig?.type === 'interval' && (
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Repeat Every (Days) *</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="365"
-                      value={formData.repetitionConfig.days || 1}
-                      onChange={(e) => setFormData({
-                        ...formData,
-                        repetitionConfig: {
-                          ...formData.repetitionConfig!,
-                          days: parseInt(e.target.value) || 1
-                        }
-                      })}
-                      className="w-full border border-gray-300 rounded-lg px-4 py-3 text-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      disabled={isLoading}
-                    />
-                  </div>
-                )}
-
-                {formData.repetitionConfig?.type === 'weekly' && (
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Select Days *</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {weekDays.map(day => (
-                        <label key={day.key} className="flex items-center p-2 border rounded cursor-pointer hover:bg-gray-50">
-                          <input
-                            type="checkbox"
-                            checked={weeklyDays.includes(day.key)}
-                            onChange={() => handleWeeklyDayToggle(day.key)}
-                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                            disabled={isLoading}
-                          />
-                          <span className="ml-2 text-sm text-gray-700">{day.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {formData.repetitionConfig?.type === 'monthly' && (
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Day of Month *</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="31"
-                      value={formData.repetitionConfig.onDate || 1}
-                      onChange={(e) => setFormData({
-                        ...formData,
-                        repetitionConfig: {
-                          ...formData.repetitionConfig!,
-                          onDate: parseInt(e.target.value) || 1
-                        }
-                      })}
-                      className="w-full border border-gray-300 rounded-lg px-4 py-3 text-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Enter day of month (1-31)"
-                      disabled={isLoading}
-                    />
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Time *</label>
-                  <input
-                    type="time"
-                    value={formData.repetitionConfig?.atTime || '09:00'}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      repetitionConfig: {
-                        ...formData.repetitionConfig!,
-                        atTime: e.target.value
-                      }
-                    })}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-3 text-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    disabled={isLoading}
-                  />
-                </div>
-              </>
+              </div>
             )}
+
+            {formData.repetitionConfig?.type === 'monthly' && (
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Day of Month *</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="31"
+                  value={formData.repetitionConfig.onDate || 1}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    repetitionConfig: {
+                      ...formData.repetitionConfig!,
+                      onDate: parseInt(e.target.value) || 1
+                    }
+                  })}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 text-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter day of month (1-31)"
+                  disabled={isLoading}
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Time *</label>
+              <input
+                type="time"
+                value={formData.repetitionConfig?.atTime || '09:00'}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  repetitionConfig: {
+                    ...formData.repetitionConfig!,
+                    atTime: e.target.value
+                  }
+                })}
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={isLoading}
+              />
+            </div>
           </div>
 
           <div className="flex justify-end space-x-3 pt-4 border-t">

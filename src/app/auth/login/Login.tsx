@@ -1,7 +1,9 @@
-import React from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useEffect } from 'react';
+import { useRouter, } from 'next/navigation';
 import { useAuth } from '@/app/contexts/AuthContext';
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+
+
 
 interface LoginProps {
   onGoogleSignIn?: () => void;
@@ -9,14 +11,17 @@ interface LoginProps {
 
 const LoginComponent: React.FC<LoginProps> = ({ onGoogleSignIn }) => {
   const {isAuthenticated,user} = useAuth();
-
-  if(isAuthenticated){
-    console.log('User is already authenticated:', user);
-  }
-
-
-
   const router = useRouter();
+
+ useEffect(() => {
+    if (isAuthenticated) {
+      if (user?.role === 'ADMIN') {
+        router.push('/admin');
+      } else {
+        router.push('/operation');
+      }
+    }
+  }, [isAuthenticated, user, router]);
   const handleGoogleSignIn = async() => {
    
 

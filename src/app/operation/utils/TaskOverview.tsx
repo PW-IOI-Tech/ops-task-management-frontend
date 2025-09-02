@@ -4,52 +4,54 @@ import React, { useState ,JSX} from 'react';
 import { Search, Filter, Eye, Edit, Calendar, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
+import { Assignment } from './types';
 
 const baseURL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
+
 // Interface to match the API response structure
-interface Assignment {
-  id: string;
-  taskId: string;
-  scheduleId: string | null;
-  assignedTo: string;
-  assignedBy: string;
-  status: 'PENDING' | 'COMPLETED';
-  parameterValue: string | null;
-  comment: string | null;
-  completedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  task: {
-    id: string;
-    title: string;
-    description: string | null;
-    categoryId: string | null;
-    subcategoryId: string | null;
-    createdBy: string;
-    taskType: 'ADHOC' | 'RECURRING';
-    parameterType: 'NUMBER' | 'TEXT' | 'BOOLEAN' | 'DROPDOWN';
-    parameterLabel: string;
-    parameterUnit: string | null;
-    parameterIsRequired: boolean;
-    dropdownOptions: string[];
-    dueDate: string | null; // For ADHOC tasks
-    nextDueDate: string | null;
-    category: {
-      id: string;
-      name: string;
-      description: string | null;
-    } | null;
-    subcategory: {
-      id: string;
-      name: string;
-      description: string | null;
-    } | null;
-  };
-  schedule: {
-    scheduledDate: string; // For RECURRING tasks
-  } | null;
-}
+// interface Assignment {
+//   id: string;
+//   taskId: string;
+//   scheduleId: string | null;
+//   assignedTo: string;
+//   assignedBy: string;
+//   status: 'PENDING' | 'COMPLETED';
+//   parameterValue: string | null;
+//   comment: string | null;
+//   completedAt: string | null;
+//   createdAt: string;
+//   updatedAt: string;
+//   task: {
+//     id: string;
+//     title: string;
+//     description: string | null;
+//     categoryId: string | null;
+//     subcategoryId: string | null;
+//     createdBy: string;
+//     taskType: 'ADHOC' | 'RECURRING';
+//     parameterType: 'NUMBER' | 'TEXT' | 'BOOLEAN' | 'DROPDOWN' | 'COMMENT' | 'DATETIME';
+//     parameterLabel: string;
+//     parameterUnit: string | null;
+//     parameterIsRequired: boolean;
+//     dropdownOptions: string[];
+//     dueDate: string | null; // For ADHOC tasks
+//     nextDueDate: string | null;
+//     category: {
+//       id: string;
+//       name: string;
+//       description: string | null;
+//     } | null;
+//     subcategory: {
+//       id: string;
+//       name: string;
+//       description: string | null;
+//     } | null;
+//   };
+//   schedule: {
+//     scheduledDate: string; // For RECURRING tasks
+//   } | null;
+// }
 
 type TaskFilter = 'all' | 'ADHOC' | 'RECURRING';
 
@@ -441,84 +443,168 @@ const TaskOverview: React.FC<TaskOverviewProps> = ({
       )}
 
       {/* Combined Input Modal */}
-      {showInputModal && selectedAssignment && (
-        <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
-            <div className="border-b border-gray-200 p-6">
-              <div className="flex justify-between items-center">
-                <h3 className="text-xl font-bold text-gray-800 flex items-center">
-                  <Edit className="w-5 h-5 mr-2 text-blue-600" />
-                  Complete Task
-                </h3>
-                <button 
-                  onClick={() => setShowInputModal(false)} 
-                  className="text-gray-400 hover:text-gray-600 transition-colors p-1 hover:bg-gray-100 rounded-lg"
-                  disabled={isSubmitting}
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-            
-            <div className="p-6 space-y-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-3">
-                  Parameter Input {selectedAssignment.task.parameterType} 
-                  {selectedAssignment.task.parameterUnit && <span className="text-red-500"> in ({selectedAssignment.task.parameterUnit})</span>}
-                </label>
-               <input type="text" 
-               value={parameterInput}
-               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParameterInput(e.target.value)}
-               className="w-full border text-black border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200" />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-3">
-                  Comment <span className="text-gray-400">(Optional)</span>
-                </label>
-                <textarea
-                  value={commentInput}
-                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCommentInput(e.target.value)}
-                  rows={3}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 resize-none text-gray-800"
-                  placeholder="Enter optional comment..."
+      {/* Enhanced Input Modal with Multiple Parameter Types */}
+{showInputModal && selectedAssignment && (
+  <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+      <div className="border-b border-gray-200 p-6">
+        <div className="flex justify-between items-center">
+          <h3 className="text-xl font-bold text-gray-800 flex items-center">
+            <Edit className="w-5 h-5 mr-2 text-blue-600" />
+            Complete Task
+          </h3>
+          <button 
+            onClick={() => setShowInputModal(false)} 
+            className="text-gray-400 hover:text-gray-600 transition-colors p-1 hover:bg-gray-100 rounded-lg"
+            disabled={isSubmitting}
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+      
+      <div className="p-6 space-y-6">
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-3">
+            {selectedAssignment.task.parameterLabel}
+            {selectedAssignment.task.parameterIsRequired && <span className="text-red-500"> *</span>}
+            {selectedAssignment.task.parameterUnit && (
+              <span className="text-gray-500"> ({selectedAssignment.task.parameterUnit})</span>
+            )}
+          </label>
+          
+          {/* Render different input types based on parameterType */}
+          {selectedAssignment.task.parameterType === 'DROPDOWN' ? (
+            <select
+              value={parameterInput}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setParameterInput(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-gray-800"
+              disabled={isSubmitting}
+            >
+              <option value="">Select an option</option>
+              {selectedAssignment.task.dropdownOptions.map((option: string, index: number) => (
+                <option key={index} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          ) : selectedAssignment.task.parameterType === 'BOOLEAN' ? (
+            <div className="flex items-center space-x-4">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="booleanValue"
+                  value="true"
+                  checked={parameterInput === 'true'}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParameterInput(e.target.value)}
+                  className="mr-2 text-blue-600 focus:ring-blue-500"
                   disabled={isSubmitting}
                 />
-              </div>
-
-              <div className="flex justify-end space-x-3 pt-4">
-                <button
-                  onClick={() => setShowInputModal(false)}
-                  className="px-5 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-150 font-medium disabled:opacity-50"
+                <span className="text-gray-700">Yes</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="booleanValue"
+                  value="false"
+                  checked={parameterInput === 'false'}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParameterInput(e.target.value)}
+                  className="mr-2 text-blue-600 focus:ring-blue-500"
                   disabled={isSubmitting}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleInputSave}
-                  disabled={
-                    isSubmitting || 
-                    (selectedAssignment.task.parameterIsRequired && !parameterInput.trim())
-                  }
-                  className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-150 flex items-center font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Completing...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 mr-2" />
-                      Complete Task
-                    </>
-                  )}
-                </button>
-              </div>
+                />
+                <span className="text-gray-700">No</span>
+              </label>
             </div>
+          ) : selectedAssignment.task.parameterType === 'DATETIME' ? (
+            <input
+              type="datetime-local"
+              value={parameterInput}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParameterInput(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-gray-800"
+              disabled={isSubmitting}
+            />
+          ) : selectedAssignment.task.parameterType === 'NUMBER' ? (
+            <input
+              type="number"
+              value={parameterInput}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParameterInput(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-gray-800"
+              placeholder="Enter a number..."
+              disabled={isSubmitting}
+            />
+          ) : (
+            // Default TEXT input
+            <input
+              type="text"
+              value={parameterInput}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParameterInput(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-gray-800"
+              placeholder="Enter text..."
+              disabled={isSubmitting}
+            />
+          )}
+          
+          {/* Show parameter type indicator */}
+          <div className="mt-2 flex items-center space-x-2">
+            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
+              Type: {selectedAssignment.task.parameterType}
+            </span>
+            {selectedAssignment.task.parameterType === 'DATETIME' && (
+              <span className="text-xs text-blue-600">
+                Local time (will be converted to UTC)
+              </span>
+            )}
           </div>
         </div>
-      )}
+
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-3">
+            Comment <span className="text-gray-400">(Optional)</span>
+          </label>
+          <textarea
+            value={commentInput}
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCommentInput(e.target.value)}
+            rows={3}
+            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 resize-none text-gray-800"
+            placeholder="Enter optional comment..."
+            disabled={isSubmitting}
+          />
+        </div>
+
+        <div className="flex justify-end space-x-3 pt-4">
+          <button
+            onClick={() => setShowInputModal(false)}
+            className="px-5 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-150 font-medium disabled:opacity-50"
+            disabled={isSubmitting}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleInputSave}
+            disabled={
+              isSubmitting || 
+              (selectedAssignment.task.parameterIsRequired && !parameterInput.trim())
+            }
+            className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-150 flex items-center font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Completing...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-4 h-4 mr-2" />
+                Complete Task
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
     </div>
   );
 };
