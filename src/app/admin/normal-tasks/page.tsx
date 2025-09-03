@@ -18,6 +18,8 @@ import axios from 'axios';
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 import { useRouter } from 'next/navigation';
 import { Category } from './utils/types';
+import {toast} from 'react-toastify'
+
 
 interface Task {
   id: string; // Changed from number to string (taskId from API)
@@ -113,7 +115,7 @@ export default function NormalTasks() {
         }
       });
 
-      console.log('Created category:', response.data);
+      toast.success('Category created successfully');
       
       // Extract the created category from the response
       const createdCategory = response.data?.data || response.data;
@@ -183,21 +185,78 @@ export default function NormalTasks() {
     setShowDeleteModal(true);
   };
 
-  const confirmDeleteCategory = () => {
-    if (categoryToDelete) {
-      setCategories(categories.filter(cat => cat.id !== categoryToDelete.id));
-      setShowDeleteModal(false);
-      setCategoryToDelete(null);
-    }
-  };
+ const confirmDeleteCategory = async () => {
+  if (!categoryToDelete) return;
+  
+  try {
+    await axios.delete(`${backendUrl}/api/categories/${categoryToDelete.id}`, {
+      withCredentials: true
+    });
 
-  const handleUpdateCategory = (updatedCategory: Category) => {
+
+
+    toast.success('Category deleted successfully');
+    // Remove from local state after successful API call
+    setCategories(categories.filter(cat => cat.id !== categoryToDelete.id));
+    setShowDeleteModal(false);
+    setCategoryToDelete(null);
+    setError(null);
+    
+  } catch (err) {
+    console.error('Error deleting category:', err);
+    setError('Failed to delete category');
+    
+    // Fallback: remove from local state if API fails
+    setCategories(categories.filter(cat => cat.id !== categoryToDelete.id));
+    setShowDeleteModal(false);
+    setCategoryToDelete(null);
+  }
+};
+
+  const handleUpdateCategory = async (updatedCategory: Category) => {
+  try {
+    const response = await axios.patch(`${backendUrl}/api/categories/${updatedCategory.id}`, {
+      name: updatedCategory.name,
+      description: updatedCategory.description || ''
+    }, {
+      withCredentials: true,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    toast.success('Category updated successfully');
+    
+    // Extract the updated category from the response
+    const responseCategory = response.data?.data || response.data;
+    
+    // Update local state with the API response
+    const categoryWithDefaults: Category = {
+      ...responseCategory,
+      subcategories: responseCategory.subcategories || [],
+      directTasks: responseCategory.directTasks || []
+    };
+    
+    setCategories(categories.map(cat => 
+      cat.id === updatedCategory.id ? categoryWithDefaults : cat
+    ));
+    setShowEditCategoryModal(false);
+    setCategoryToEdit(null);
+    setError(null);
+    
+  } catch (err) {
+    console.error('Error updating category:', err);
+    setError('Failed to update category');
+    
+    // Fallback: update local state if API fails
     setCategories(categories.map(cat => 
       cat.id === updatedCategory.id ? updatedCategory : cat
     ));
     setShowEditCategoryModal(false);
     setCategoryToEdit(null);
-  };
+  }
+};
+
 
   const filteredCategories = Array.isArray(categories) 
     ? categories.filter(category => 

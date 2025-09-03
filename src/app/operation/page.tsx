@@ -3,52 +3,53 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import MyTasks from './utils/MyTasks';
 import TaskOverview from './utils/TaskOverview';
+import { Assignment } from './utils/types';
 
 const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 // Interface to match the API response structure
-interface Assignment {
-  id: string;
-  taskId: string;
-  scheduleId: string | null;
-  assignedTo: string;
-  assignedBy: string;
-  status: 'PENDING' | 'COMPLETED';
-  parameterValue: string | null;
-  comment: string | null;
-  completedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  task: {
-    id: string;
-    title: string;
-    description: string | null;
-    categoryId: string | null;
-    subcategoryId: string | null;
-    createdBy: string;
-    taskType: 'ADHOC' | 'RECURRING';
-    parameterType: 'NUMBER' | 'TEXT' | 'BOOLEAN' | 'DROPDOWN';
-    parameterLabel: string;
-    parameterUnit: string | null;
-    parameterIsRequired: boolean;
-    dropdownOptions: string[];
-    dueDate: string | null; // For ADHOC tasks
-    nextDueDate: string | null;
-    category: {
-      id: string;
-      name: string;
-      description: string | null;
-    } | null;
-    subcategory: {
-      id: string;
-      name: string;
-      description: string | null;
-    } | null;
-  };
-  schedule: {
-    scheduledDate: string; // For RECURRING tasks
-  } | null;
-}
+// interface Assignment {
+//   id: string;
+//   taskId: string;
+//   scheduleId: string | null;
+//   assignedTo: string;
+//   assignedBy: string;
+//   status: 'PENDING' | 'COMPLETED';
+//   parameterValue: string | null;
+//   comment: string | null;
+//   completedAt: string | null;
+//   createdAt: string;
+//   updatedAt: string;
+//   task: {
+//     id: string;
+//     title: string;
+//     description: string | null;
+//     categoryId: string | null;
+//     subcategoryId: string | null;
+//     createdBy: string;
+//     taskType: 'ADHOC' | 'RECURRING';
+//     parameterType: 'NUMBER' | 'TEXT' | 'BOOLEAN' | 'DROPDOWN' | 'COMMENT' | 'DATETIME';
+//     parameterLabel: string;
+//     parameterUnit: string | null;
+//     parameterIsRequired: boolean;
+//     dropdownOptions: string[];
+//     dueDate: string | null; // For ADHOC tasks
+//     nextDueDate: string | null;
+//     category: {
+//       id: string;
+//       name: string;
+//       description: string | null;
+//     } | null;
+//     subcategory: {
+//       id: string;
+//       name: string;
+//       description: string | null;
+//     } | null;
+//   };
+//   schedule: {
+//     scheduledDate: string; // For RECURRING tasks
+//   } | null;
+// }
 
 const Page: React.FC = () => {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
