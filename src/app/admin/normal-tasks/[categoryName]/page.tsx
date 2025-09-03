@@ -8,49 +8,6 @@ import axios from 'axios';
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 import { Category, Subcategory, Task } from '../utils/types';
 
-// interface Task {
-//   id: string; // Changed from number to string (taskId from API)
-//   title: string;
-//   description: string | null;
-//   taskType: 'ADHOC' | 'RECURRING';
-//   category?: string;
-//   subcategory?: string;
-//   parameterLabel: string;
-//   parameterUnit?: string | null;
-//   dueDate?: string | null;
-//   isAssigned: boolean;
-//   assignments: unknown[];
-//   createdBy: string;
-//   status?: 'pending' | 'completed'; // Default status if not in API
-// }
-
-// interface Subcategory {
-//   id: string;
-//   name: string;
-//   description?: string;
-//   categoryId: string;
-//   createdAt?: string;
-//   updatedAt?: string;
-//   createdBy?: string;
-//   tasks: Task[];
-//   category?: {
-//     id: string;
-//     name: string;
-//   };
-//   createdByUser?: {
-//     id: string;
-//     firstName: string;
-//     lastName: string;
-//   };
-// }
-
-// interface Category {
-//   id: number;
-//   name: string;
-//   description?: string;
-//   subcategories: Subcategory[];
-//   directTasks: Task[];
-// }
 interface CategoryPageProps {
   params: Promise<{
     categoryName: string;

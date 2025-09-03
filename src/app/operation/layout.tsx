@@ -4,6 +4,7 @@ import { FileText, LogOut, Menu, X, Clipboard } from "lucide-react";
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter, usePathname } from 'next/navigation';
 import { ProtectedRoute } from "../contexts/ProtectedRoute";
+import {toast} from 'react-toastify';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -27,6 +28,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const handleLogout = async () => {
     try {
       await logout();
+      toast.success('Logged out successfully');
       closeSidebar();
     } catch (error) {
       console.error('Logout failed:', error);

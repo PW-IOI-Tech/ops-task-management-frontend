@@ -24,6 +24,7 @@ import axios from 'axios';
 import AssignMemberModal from './AssignMemberModel';
 import TaskViewModal from './TaskViewModel';
 import { ParameterType, Task,Subcategory, Category } from './types';
+import {toast} from 'react-toastify'
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -33,7 +34,7 @@ const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 
 interface CategoryDetailViewProps {
-  category: Category;
+  category: Category ;
   onBack: () => void;
   onUpdateCategory: (category: Category) => void;
 }
@@ -87,8 +88,16 @@ const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
           createdBy: apiTask.createdBy,
           status: 'pending' // Default status since not in API response
           ,
+
           taskId: apiTask.taskId,
-          parameterType: apiTask.parameterType as ParameterType
+          parameterType: apiTask.parameterType as ParameterType,
+          repetitionConfig:  apiTask.repetitionConfig || {
+            type: 'none',
+            days: undefined,
+            onDays: undefined,
+            onDate: undefined,
+            atTime: undefined
+          }
         };
 
         if (apiTask.subcategory) {
@@ -122,11 +131,11 @@ const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
 
 
-const handleAssignMembers = (memberIds: string[]) => {
+const handleAssignMembers = async(memberIds: string[]) => {
   // Handle successful assignment - you can show a success message
-  console.log('Members assigned successfully:', memberIds);
-  // Optionally refresh the task data
-  window.location.reload();
+  toast.success('Members assigned successfully');
+  await refetchData();
+  
 };
 
 const handleTaskClick = (taskId: string) => {
@@ -155,6 +164,7 @@ const handleTaskClick = (taskId: string) => {
         'Content-Type': 'application/json'
       }
     });
+    toast.success('Task deleted successfully');
   } catch (error) {
     console.error('Error deleting task:', error);
     throw error;
@@ -174,6 +184,8 @@ const handleTaskClick = (taskId: string) => {
         }
       });
       
+      toast.success('Subcategory created successfully');
+      
       return response.data;
     } catch (error) {
       console.error('Error creating subcategory:', error);
@@ -189,6 +201,7 @@ const handleTaskClick = (taskId: string) => {
           'Content-Type': 'application/json'
         }
       });
+      toast.success('Subcategory deleted successfully');
     } catch (error) {
       console.error('Error deleting subcategory:', error);
       throw error;
@@ -267,6 +280,68 @@ const handleTaskClick = (taskId: string) => {
     fetchData();
   }, [category.id]);
 
+
+  // Add this function to your CategoryDetailView component
+const refetchData = async () => {
+  setLoading(true);
+  try {
+    // ✅ Same logic as in useEffect but as a reusable function
+    const [subcategoriesResponse, tasksResponse] = await Promise.all([
+      axios.get(`${backendUrl}/api/subcategories?categoryId=${category.id}`, {
+        withCredentials: true,
+        headers: { 'Content-Type': 'application/json' }
+      }),
+      axios.get(`${backendUrl}/api/tasks?taskType=RECURRING`, {
+        withCredentials: true,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    ]);
+
+    // Process subcategories
+    const subcategoriesApiData = subcategoriesResponse.data;
+    let subcategoriesData = [];
+    
+    if (subcategoriesApiData.success && subcategoriesApiData.data && subcategoriesApiData.data.subcategories) {
+      subcategoriesData = subcategoriesApiData.data.subcategories;
+    } else if (Array.isArray(subcategoriesApiData)) {
+      subcategoriesData = subcategoriesApiData;
+    }
+
+    const subcategoriesWithEmptyTasks = subcategoriesData.map((subcategory: Subcategory) => ({
+      ...subcategory,
+      tasks: []
+    }));
+
+    // Create category with subcategories
+    const categoryWithSubcategories: Category = {
+      ...category,
+      subcategories: subcategoriesWithEmptyTasks,
+      directTasks: []
+    };
+
+    // Process tasks and organize them
+    const tasksApiData = tasksResponse.data;
+    let tasksData = [];
+    
+    if (tasksApiData.success && Array.isArray(tasksApiData.data)) {
+      tasksData = tasksApiData.data;
+    } else if (Array.isArray(tasksApiData)) {
+      tasksData = tasksApiData;
+    }
+
+    // Organize tasks into correct subcategories and direct tasks
+    const organizedCategory = organizeTasks(tasksData, categoryWithSubcategories);
+    
+    onUpdateCategory(organizedCategory);
+  } catch (error) {
+    console.error('Error refetching data:', error);
+    toast.error('Failed to refresh data');
+  } finally {
+    setLoading(false);
+  }
+};
+
+
   const handleEditTask = (task: Task, context: string | number, e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     setTaskToEdit(task);
@@ -331,7 +406,7 @@ const handleTaskClick = (taskId: string) => {
     setShowEditSubcategoryModal(true);
   };
 
-  const handleUpdateSubcategory = (updatedSubcategory: Subcategory) => {
+  const handleUpdateSubcategory = async(updatedSubcategory: Subcategory) => {
     const updatedCategory: Category = {
       ...category,
       subcategories: category.subcategories.map(sub => 
@@ -342,17 +417,24 @@ const handleTaskClick = (taskId: string) => {
     onUpdateCategory(updatedCategory);
     setShowEditSubcategoryModal(false);
     setSubcategoryToEdit(null);
+    await refetchData();
   };
 
   // ✅ Updated getScheduleText for new task structure
   const getScheduleText = (task: Task): string => {
-    if (task.taskType === 'ADHOC' && task.dueDate) {
-      return `Due: ${new Date(task.dueDate).toLocaleDateString()}`;
+    console.log("Task Printing",task)
+    if(task.repetitionConfig.type ==='interval'){
+      return `Every ${task.repetitionConfig.days} days at ${task.repetitionConfig.atTime}`;
     }
+    else if(task.repetitionConfig.type ==='weekly'){
+      return `Every ${task.repetitionConfig.onDays?.join(', ')} of the week at ${task.repetitionConfig.atTime}`;
+    }
+      else if(task.repetitionConfig.type ==='monthly'){
+        return `On day ${task.repetitionConfig.onDate}th of every month at ${task.repetitionConfig.atTime}`;
+      }
+   
     
-    if (task.taskType === 'RECURRING') {
-      return 'Recurring';
-    }
+    
     
     return 'No schedule';
   };
@@ -712,12 +794,12 @@ const handleTaskClick = (taskId: string) => {
             setShowCreateTaskModal(false);
             setTaskContext('');
           }}
-          onCreateTask={(taskData) => {
-            console.log('Task created:', taskData);
+          onCreateTask={async(taskData) => {
+            toast.success('Task created successfully');
             setShowCreateTaskModal(false);
             setTaskContext('');
-            // ✅ Refresh tasks after creation
-            window.location.reload();
+            await refetchData();
+
           }}
           isSubcategoryTask={taskContext !== 'direct'}
           categoryId={category.id}
@@ -731,8 +813,9 @@ const handleTaskClick = (taskId: string) => {
           onCreateSubcategory={async (subcategoryData) => {
             try {
               await createSubcategory(subcategoryData);
-              window.location.reload();
+              
               setShowCreateSubcategoryModal(false);
+              await refetchData();
             } catch (error) {
               console.error('Failed to create subcategory:', error);
             }
@@ -748,16 +831,14 @@ const handleTaskClick = (taskId: string) => {
       setTaskToEdit(null);
       setTaskContext('');
     }}
-    onUpdateTask={(updatedTaskData) => {
+    onUpdateTask={async (updatedTaskData) => {
       // ✅ Handle the updated task data
-      console.log('Task updated:', updatedTaskData);
-      
-      // ✅ Refresh the tasks by reloading the page or refetching data
-      window.location.reload();
+      toast.success('Task updated successfully');
       
       setShowEditTaskModal(false);
       setTaskToEdit(null);
       setTaskContext('');
+      await refetchData();
     }}
     isSubcategoryTask={taskContext !== 'direct'}
     categoryId={category.id}

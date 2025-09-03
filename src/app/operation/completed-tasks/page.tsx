@@ -4,50 +4,9 @@ import { ArrowLeft, Search, Filter, Eye, Edit, Calendar, CheckCircle2, AlertCirc
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import {toast} from 'react-toastify';
+import { Assignment } from '../utils/types';
 
 // Updated interface to match your backend Assignment structure
-interface Assignment {
-  id: string;
-  taskId: string;
-  scheduleId: string | null;
-  assignedTo: string;
-  assignedBy: string;
-  status: 'PENDING' | 'COMPLETED';
-  parameterValue: string | null;
-  comment: string | null;
-  completedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  task: {
-    id: string;
-    title: string;
-    description: string | null;
-    categoryId: string | null;
-    subcategoryId: string | null;
-    createdBy: string;
-    taskType: 'ADHOC' | 'RECURRING';
-    parameterType: 'NUMBER' | 'TEXT' | 'BOOLEAN' | 'DROPDOWN';
-    parameterLabel: string;
-    parameterUnit: string | null;
-    parameterIsRequired: boolean;
-    dropdownOptions: string[];
-    dueDate: string | null;
-    nextDueDate: string | null;
-    category: {
-      id: string;
-      name: string;
-      description: string | null;
-    } | null;
-    subcategory: {
-      id: string;
-      name: string;
-      description: string | null;
-    } | null;
-  };
-  schedule: {
-    scheduledDate: string;
-  } | null;
-}
 
 type TaskFilter = 'all' | 'ADHOC' | 'RECURRING';
 
@@ -117,12 +76,31 @@ export default function CompletedTasksPage() {
     setShowTaskDetail(true);
   };
 
-  const handleInputClick = (task: Assignment): void => {
-    setSelectedTask(task);
-    setParameterInput(task.parameterValue || '');
-    setCommentInput(task.comment || '');
-    setShowEditModal(true);
-  };
+const handleInputClick = (task: Assignment): void => {
+  setSelectedTask(task);
+  
+  // Handle different parameter types for initial values
+  let initialValue = task.parameterValue || '';
+  
+  if (task.task.parameterType === 'DATETIME' && task.parameterValue) {
+    try {
+      // Convert UTC datetime back to local datetime-local format
+      const utcDate = new Date(task.parameterValue);
+      if (!isNaN(utcDate.getTime())) {
+        // Format for datetime-local input (YYYY-MM-DDTHH:mm)
+        const localDateTime = new Date(utcDate.getTime() - utcDate.getTimezoneOffset() * 60000);
+        initialValue = localDateTime.toISOString().slice(0, 16);
+      }
+    } catch (error) {
+      console.error('Error parsing existing datetime value:', error);
+      initialValue = '';
+    }
+  }
+  
+  setParameterInput(initialValue);
+  setCommentInput(task.comment || '');
+  setShowEditModal(true);
+};
 
   // Handle editing completed task using the same API endpoint
   const handleEditSave = async (): Promise<void> => {
@@ -529,85 +507,176 @@ export default function CompletedTasksPage() {
         </div>
       )}
 
-      {/* Edit Modal for Parameter and Comment */}
-      {showEditModal && selectedTask && (
-        <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
-            <div className="border-b border-gray-200 p-6">
-              <div className="flex justify-between items-center">
-                <h3 className="text-xl font-bold text-gray-800 flex items-center">
-                  <Edit className="w-5 h-5 mr-2 text-green-600" />
-                  Edit Completed Task
-                </h3>
-                <button 
-                  onClick={() => setShowEditModal(false)} 
-                  className="text-gray-400 hover:text-gray-600 transition-colors p-1 hover:bg-gray-100 rounded-lg"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-            
-            <div className="p-6 space-y-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-3">
-                  Parameter Input {selectedTask.task.parameterType} {selectedTask.task.parameterUnit && <span className="text-red-500"> in ({selectedTask.task.parameterUnit})</span>}
-                </label>
-                <input type="text"
-                 className="w-full border text-black border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200"
-                 value={parameterInput}
-                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParameterInput(e.target.value)}
-                 name="" id="" />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-3">
-                  Comment <span className="text-gray-400">(Optional)</span>
-                </label>
-                <textarea
-                  value={commentInput}
-                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCommentInput(e.target.value)}
-                  rows={3}
-                  className="w-full border text-black border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 resize-none"
-                  placeholder="Edit optional comment..."
-                />
-              </div>
-
-              <div className="bg-green-50 border border-green-200 p-3 rounded-lg">
-                <div className="flex items-center text-green-700 text-sm">
-                  <CheckCircle2 className="w-4 h-4 mr-2" />
-                  <span className="font-medium">Editing completed task</span>
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-3 pt-4">
-                <button
-                  onClick={() => setShowEditModal(false)}
-                  className="px-5 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-150 font-medium"
+     
+     {/* Enhanced Edit Modal for Parameter and Comment */}
+{showEditModal && selectedTask && (
+  <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+      <div className="border-b border-gray-200 p-6">
+        <div className="flex justify-between items-center">
+          <h3 className="text-xl font-bold text-gray-800 flex items-center">
+            <Edit className="w-5 h-5 mr-2 text-green-600" />
+            Edit Completed Task
+          </h3>
+          <button 
+            onClick={() => setShowEditModal(false)} 
+            className="text-gray-400 hover:text-gray-600 transition-colors p-1 hover:bg-gray-100 rounded-lg"
+            disabled={isSubmitting}
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+      
+      <div className="p-6 space-y-6">
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-3">
+            {selectedTask.task.parameterLabel}
+            {selectedTask.task.parameterIsRequired && <span className="text-red-500"> *</span>}
+            {selectedTask.task.parameterUnit && (
+              <span className="text-gray-500"> ({selectedTask.task.parameterUnit})</span>
+            )}
+          </label>
+          
+          {/* Render different input types based on parameterType */}
+          {selectedTask.task.parameterType === 'DROPDOWN' ? (
+            <select
+              value={parameterInput}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setParameterInput(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 text-gray-800"
+              disabled={isSubmitting}
+            >
+              <option value="">Select an option</option>
+              {selectedTask.task.dropdownOptions.map((option: string, index: number) => (
+                <option key={index} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          ) : selectedTask.task.parameterType === 'BOOLEAN' ? (
+            <div className="flex items-center space-x-4">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="booleanValue"
+                  value="true"
+                  checked={parameterInput === 'true'}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParameterInput(e.target.value)}
+                  className="mr-2 text-green-600 focus:ring-green-500"
                   disabled={isSubmitting}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleEditSave}
-                  disabled={
-                    isSubmitting || 
-                    (selectedTask.task.parameterIsRequired && !parameterInput.trim())
-                  }
-                  className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-150 flex items-center font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSubmitting ? (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  ) : (
-                    <CheckCircle2 className="w-4 h-4 mr-2" />
-                  )}
-                  {isSubmitting ? 'Updating...' : 'Update Task'}
-                </button>
-              </div>
+                />
+                <span className="text-gray-700">Yes</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="booleanValue"
+                  value="false"
+                  checked={parameterInput === 'false'}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParameterInput(e.target.value)}
+                  className="mr-2 text-green-600 focus:ring-green-500"
+                  disabled={isSubmitting}
+                />
+                <span className="text-gray-700">No</span>
+              </label>
             </div>
+          ) : selectedTask.task.parameterType === 'DATETIME' ? (
+            <input
+              type="datetime-local"
+              value={parameterInput}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParameterInput(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 text-gray-800"
+              disabled={isSubmitting}
+            />
+          ) : selectedTask.task.parameterType === 'NUMBER' ? (
+            <input
+              type="number"
+              value={parameterInput}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParameterInput(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 text-gray-800"
+              placeholder="Enter a number..."
+              disabled={isSubmitting}
+            />
+          ) : (
+            // Default TEXT input
+            <input
+              type="text"
+              value={parameterInput}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParameterInput(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 text-gray-800"
+              placeholder="Enter text..."
+              disabled={isSubmitting}
+            />
+          )}
+          
+          {/* Show parameter type indicator */}
+          <div className="mt-2 flex items-center space-x-2">
+            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
+              Type: {selectedTask.task.parameterType}
+            </span>
+            {selectedTask.task.parameterType === 'DATETIME' && (
+              <span className="text-xs text-green-600">
+                Local time (will be converted to UTC)
+              </span>
+            )}
           </div>
         </div>
-      )}
+
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-3">
+            Comment <span className="text-gray-400">(Optional)</span>
+          </label>
+          <textarea
+            value={commentInput}
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCommentInput(e.target.value)}
+            rows={3}
+            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 resize-none text-gray-800"
+            placeholder="Edit optional comment..."
+            disabled={isSubmitting}
+          />
+        </div>
+
+        <div className="bg-green-50 border border-green-200 p-3 rounded-lg">
+          <div className="flex items-center text-green-700 text-sm">
+            <CheckCircle2 className="w-4 h-4 mr-2" />
+            <span className="font-medium">Editing completed task</span>
+          </div>
+        </div>
+
+        <div className="flex justify-end space-x-3 pt-4">
+          <button
+            onClick={() => setShowEditModal(false)}
+            className="px-5 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-150 font-medium disabled:opacity-50"
+            disabled={isSubmitting}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleEditSave}
+            disabled={
+              isSubmitting || 
+              (selectedTask.task.parameterIsRequired && !parameterInput.trim())
+            }
+            className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-150 flex items-center font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSubmitting ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Updating...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-4 h-4 mr-2" />
+                Update Task
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
     </div>
   );
 };
