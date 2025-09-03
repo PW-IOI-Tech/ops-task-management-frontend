@@ -33,19 +33,19 @@ interface WeekDay {
   key: string;
   label: string;
 }
-
 interface UpdateTaskPayload {
   title?: string;
   description?: string;
   categoryId?: string;
   subcategoryId?: string;
-  taskType?: 'RECURRING'; // ✅ Fixed to only RECURRING
+  taskType?: 'RECURRING';
   parameterType?: ParameterType;
   parameterLabel?: string;
   parameterUnit?: string;
   dropdownOptions?: string[];
   repetitionConfig?: RepetitionConfig;
 }
+
 
 export default function EditTaskModal({ 
   task,
@@ -75,45 +75,55 @@ export default function EditTaskModal({
   const [error, setError] = useState<string | null>(null);
 
   // ✅ Initialize form with existing task data
-  useEffect(() => {
-    if (task) {
-      setFormData({
-        title: task.title || '',
-        description: task.description || '',
-        taskType: 'RECURRING', // ✅ Always set to RECURRING
-        parameterType: task.parameterType || 'NUMBER',
-        parameterLabel: task.parameterLabel || '',
-        parameterUnit: task.parameterUnit || '',
-        dropdownOptions: Array.isArray(task.dropdownOptions) 
-          ? task.dropdownOptions.join(', ') 
-          : (task.dropdownOptions || ''),
-        repetitionConfig: (task.repetitionConfig && ['interval', 'weekly', 'monthly'].includes(task.repetitionConfig.type as string))
-          ? {
-              ...task.repetitionConfig,
-              type: task.repetitionConfig.type as 'interval' | 'weekly' | 'monthly'
-            }
-          : {
-              type: 'interval',
-              days: 3,
-              atTime: '09:00'
-            }
-      });
+  // ✅ Initialize form with existing task data
+useEffect(() => {
+  if (task) {
+    setFormData({
+      title: task.title || '',
+      description: task.description || '',
+      taskType: 'RECURRING',
+      parameterType: task.parameterType || 'NUMBER',
+      parameterLabel: task.parameterLabel || '',
+      parameterUnit: task.parameterUnit || '',
+      dropdownOptions: Array.isArray(task.dropdownOptions) 
+        ? task.dropdownOptions.join(', ') 
+        : (task.dropdownOptions || ''),
+      repetitionConfig: (task.repetitionConfig && ['interval', 'weekly', 'monthly'].includes(task.repetitionConfig.type as string))
+        ? {
+            ...task.repetitionConfig,
+            type: task.repetitionConfig.type as 'interval' | 'weekly' | 'monthly'
+          }
+        : {
+            type: 'interval',
+            days: 3,
+            atTime: '09:00'
+          }
+    });
 
-      // Set weekly days if available
-      if (task.repetitionConfig?.onDays) {
-        const dayMap: { [key: number]: string } = {
-          1: 'MON',
-          2: 'TUE',
-          3: 'WED',
-          4: 'THU',
-          5: 'FRI',
-          6: 'SAT',
-          7: 'SUN'
-        };
-        setWeeklyDays(task.repetitionConfig.onDays.map(day => dayMap[day]));
+    // ✅ FIXED: Set weekly days if available - handle both string array and number array
+    if (task.repetitionConfig?.onDays) {
+      if (Array.isArray(task.repetitionConfig.onDays)) {
+        // If it's already string array, use directly
+        if (typeof task.repetitionConfig.onDays[0] === 'string') {
+          setWeeklyDays(task.repetitionConfig.onDays as string[]);
+        } 
+        // If it's number array, convert to strings
+        else if (typeof task.repetitionConfig.onDays[0] === 'number') {
+          const dayMap: { [key: number]: string } = {
+            1: 'MON',
+            2: 'TUE',
+            3: 'WED',
+            4: 'THU',
+            5: 'FRI',
+            6: 'SAT',
+            7: 'SUN'
+          };
+          setWeeklyDays(task.repetitionConfig.onDays.map(day => dayMap[parseInt(day, 10)]).filter(Boolean));
+        }
       }
     }
-  }, [task]);
+  }
+}, [task]);
 
   const updateTask = async (taskId: string, updateData: UpdateTaskPayload): Promise<Task> => {
     try {
@@ -139,84 +149,75 @@ export default function EditTaskModal({
     );
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError(null);
+ const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
+  e.preventDefault();
+  setIsLoading(true);
+  setError(null);
 
-    try {
-      // Prepare repetition config based on type
-      let repetitionConfig: RepetitionConfig | null = null;
-      
-      if (formData.repetitionConfig?.type === 'interval') {
-        repetitionConfig = {
-          type: 'interval',
-          days: formData.repetitionConfig.days || 1,
-          atTime: formData.repetitionConfig.atTime
-        };
-      } else if (formData.repetitionConfig?.type === 'weekly') {
-        repetitionConfig = {
-          type: 'weekly',
-          onDays: weeklyDays.map(day => {
-            const dayMap: { [key: string]: number } = {
-              MON: 1,
-              TUE: 2,
-              WED: 3,
-              THU: 4,
-              FRI: 5,
-              SAT: 6,
-              SUN: 7
-            };
-            return dayMap[day];
-          }),
-          atTime: formData.repetitionConfig.atTime
-        };
-      } else if (formData.repetitionConfig?.type === 'monthly') {
-        repetitionConfig = {
-          type: 'monthly',
-          onDate: formData.repetitionConfig.onDate || 1,
-          atTime: formData.repetitionConfig.atTime
-        };
-      }
-
-      const updatePayload: UpdateTaskPayload = {
-        title: formData.title,
-        description: formData.description || undefined,
-        categoryId: categoryId?.toString(),
-        subcategoryId: isSubcategoryTask ? subcategoryId || undefined : undefined,
-        taskType: 'RECURRING', // ✅ Always RECURRING
-        parameterType: formData.parameterType,
-        parameterLabel: formData.parameterLabel,
-        parameterUnit: formData.parameterUnit || undefined,
-        dropdownOptions: formData.parameterType === 'DROPDOWN' 
-          ? formData.dropdownOptions.split(',').map(opt => opt.trim()).filter(Boolean)
-          : undefined,
-        repetitionConfig: repetitionConfig ?? undefined
+  try {
+    // Prepare repetition config based on type
+    let repetitionConfig: RepetitionConfig | null = null;
+    
+    if (formData.repetitionConfig?.type === 'interval') {
+      repetitionConfig = {
+        type: 'interval',
+        days: formData.repetitionConfig.days || 1,
+        atTime: formData.repetitionConfig.atTime
       };
-
-      // Remove undefined values
-      const cleanPayload: UpdateTaskPayload = Object.fromEntries(
-        Object.entries(updatePayload).filter(([_, value]) => value !== undefined)
-      ) as UpdateTaskPayload;
-
-      console.log('Update payload:', cleanPayload);
-
-      const updatedTask = await updateTask(task.id, cleanPayload);
-      onUpdateTask(updatedTask);
-      onClose();
-    } catch (error) {
-      console.error('Failed to update task:', error);
-      if (axios.isAxiosError(error) && error.response?.data?.message) {
-        setError(error.response.data.message);
-      } else if (error instanceof Error) {
-        setError(error.message);
-      } else {
-        setError('Failed to update task. Please try again.');
-      }
-    } finally {
-      setIsLoading(false);
+    } else if (formData.repetitionConfig?.type === 'weekly') {
+      // ✅ FIXED: Send day strings directly instead of converting to numbers
+      repetitionConfig = {
+        type: 'weekly',
+        onDays: weeklyDays, // Keep as string array: ["MON", "WED", "FRI"]
+        atTime: formData.repetitionConfig.atTime
+      };
+    } else if (formData.repetitionConfig?.type === 'monthly') {
+      repetitionConfig = {
+        type: 'monthly',
+        onDate: formData.repetitionConfig.onDate || 1,
+        atTime: formData.repetitionConfig.atTime
+      };
     }
-  };
+
+    const updatePayload: UpdateTaskPayload = {
+      title: formData.title,
+      description: formData.description || undefined,
+      categoryId: categoryId?.toString(),
+      subcategoryId: isSubcategoryTask ? subcategoryId || undefined : undefined,
+      taskType: 'RECURRING',
+      parameterType: formData.parameterType,
+      parameterLabel: formData.parameterLabel,
+      parameterUnit: formData.parameterUnit || undefined,
+      dropdownOptions: formData.parameterType === 'DROPDOWN' 
+        ? formData.dropdownOptions.split(',').map(opt => opt.trim()).filter(Boolean)
+        : undefined,
+      repetitionConfig: repetitionConfig || undefined
+    };
+
+    // Remove undefined values
+    const cleanPayload: UpdateTaskPayload = Object.fromEntries(
+      Object.entries(updatePayload).filter(([_, value]) => value !== undefined)
+    ) as UpdateTaskPayload;
+
+    console.log('Update payload:', cleanPayload);
+
+    const updatedTask = await updateTask(task.id, cleanPayload);
+    onUpdateTask(updatedTask);
+    onClose();
+  } catch (error) {
+    console.error('Failed to update task:', error);
+    if (axios.isAxiosError(error) && error.response?.data?.message) {
+      setError(error.response.data.message);
+    } else if (error instanceof Error) {
+      setError(error.message);
+    } else {
+      setError('Failed to update task. Please try again.');
+    }
+  } finally {
+    setIsLoading(false);
+  }
+};
+
 
   const weekDays: WeekDay[] = [
     { key: 'MON', label: 'Monday' },

@@ -62,7 +62,7 @@ export interface Category {
 export interface RepetitionConfig{
      type: 'none' | 'interval' | 'weekly' | 'monthly';
      days?: number;
-     onDays?: number[];
+     onDays?: string[];
      onDate?: number;
      atTime?: string;
    };
