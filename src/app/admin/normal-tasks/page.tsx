@@ -20,42 +20,21 @@ import { useRouter } from 'next/navigation';
 import { Category } from './utils/types';
 import {toast} from 'react-toastify'
 
-
-interface Task {
-  id: string; // Changed from number to string (taskId from API)
-  title: string;
-  description: string | null;
-  taskType: 'ADHOC' | 'RECURRING';
-  category?: string;
-  subcategory?: string;
-  parameterLabel: string;
-  parameterUnit?: string | null;
-  dueDate?: string | null;
-  isAssigned: boolean;
-  assignments: unknown[];
-  createdBy: string;
-  status?: 'pending' | 'completed'; // Default status if not in API
-}
-interface Subcategory {
+// Updated Category interface to match API response
+interface ApiCategory {
   id: string;
   name: string;
   description?: string;
-  categoryId: string;
-  createdAt?: string;
-  updatedAt?: string;
-  createdBy?: string;
-  tasks: Task[];
-  category?: {
-    id: string;
-    name: string;
-  };
-  createdByUser?: {
+  subcategoryCount: number;
+  totalAssignmentsToday: number;
+  completedAssignmentsToday: number;
+  pendingAssignmentsToday: number;
+  createdByUser: {
     id: string;
     firstName: string;
     lastName: string;
   };
 }
-
 
 export default function NormalTasks() {
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -66,7 +45,7 @@ export default function NormalTasks() {
   const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false);
   const [categoryToEdit, setCategoryToEdit] = useState<Category | null>(null);
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState<ApiCategory[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -81,13 +60,10 @@ export default function NormalTasks() {
           withCredentials: true
         });
         console.log('Fetched categories:', response.data);
-        // Extract categories from the nested response structure and add default properties
+        
+        // Extract categories from the nested response structure
         const categoriesData = Array.isArray(response.data?.data) 
-          ? response.data.data.map((category: Category) => ({
-              ...category,
-              subcategories: category.subcategories || [],
-              directTasks: category.directTasks || []
-            }))
+          ? response.data.data
           : [];
         setCategories(categoriesData);
         setError(null);
@@ -117,146 +93,115 @@ export default function NormalTasks() {
 
       toast.success('Category created successfully');
       
-      // Extract the created category from the response
-      const createdCategory = response.data?.data || response.data;
-      
-      // Add the new category to state with defaults for missing properties
-      const categoryWithDefaults: Category = {
-        ...createdCategory,
-        subcategories: createdCategory.subcategories || [],
-        directTasks: createdCategory.directTasks || []
-      };
-      
-      setCategories(prevCategories => [...prevCategories, categoryWithDefaults]);
+      // Refresh categories after creation
+      const categoriesResponse = await axios.get(`${backendUrl}/api/categories`, {
+        withCredentials: true
+      });
+      setCategories(categoriesResponse.data?.data || []);
       setShowCreateCategoryModal(false);
       setError(null);
       
     } catch (err) {
       console.error('Error creating category:', err);
       setError('Failed to create category');
-      
-      // Fallback: add to local state if API fails
-      const categoryWithId: Category = {
-        ...newCategory,
-        id: Date.now(),
-        subcategories: [],
-        directTasks: [],
-        taskId: '',
-        parameterType: '',
-        assignedTo: []
-      };
-      setCategories(prevCategories => [...prevCategories, categoryWithId]);
-      setShowCreateCategoryModal(false);
+      toast.error('Failed to create category');
     }
   };
 
-  const getCategoryStats = (category: Category) => {
-    // Safely handle missing properties with fallbacks
-    const directTasks = category.directTasks || [];
-    const subcategories = category.subcategories || [];
-    
-    let totalTasks = directTasks.length;
-    let completedTasks = directTasks.filter(task => task.status === 'completed').length;
-
-    subcategories.forEach(subcategory => {
-      const subcategoryTasks = subcategory.tasks || [];
-      totalTasks += subcategoryTasks.length;
-      completedTasks += subcategoryTasks.filter(task => task.status === 'completed').length;
-    });
-
-    return { totalTasks, completedTasks };
+  const handleCategoryClick = (category: ApiCategory) => {
+    // Convert category name to URL-friendly slug
+    const categorySlug = category.name.toLowerCase().replace(/\s+/g, '-');
+    router.push(`/admin/normal-tasks/${encodeURIComponent(categorySlug)}`);
   };
 
-  const handleCategoryClick = (category: Category) => {
-  // Convert category name to URL-friendly slug
-  const categorySlug = category.name.toLowerCase().replace(/\s+/g, '-');
-  router.push(`/admin/normal-tasks/${encodeURIComponent(categorySlug)}`);
-};
-
-  const handleEditCategory = (category: Category, e: React.MouseEvent<HTMLButtonElement>) => {
+  const handleEditCategory = (category: ApiCategory, e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
-    setCategoryToEdit(category);
+    // Convert ApiCategory to Category for editing
+    const categoryForEdit: Category = {
+      id: category.id,
+      name: category.name,
+      description: category.description || '',
+      subcategories: [],
+      directTasks: [],
+      taskId: '',
+      parameterType: '',
+      assignedTo: []
+    };
+    setCategoryToEdit(categoryForEdit);
     setShowEditCategoryModal(true);
   };
 
-  const handleDeleteCategory = (category: Category, e: React.MouseEvent<HTMLButtonElement>) => {
+  const handleDeleteCategory = (category: ApiCategory, e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
-    setCategoryToDelete(category);
+    // Convert ApiCategory to Category for deletion
+    const categoryForDelete: Category = {
+      id: category.id,
+      name: category.name,
+      description: category.description || '',
+      subcategories: [],
+      directTasks: [],
+      taskId: '',
+      parameterType: '',
+      assignedTo: []
+    };
+    setCategoryToDelete(categoryForDelete);
     setShowDeleteModal(true);
   };
 
- const confirmDeleteCategory = async () => {
-  if (!categoryToDelete) return;
-  
-  try {
-    await axios.delete(`${backendUrl}/api/categories/${categoryToDelete.id}`, {
-      withCredentials: true
-    });
-
-
-
-    toast.success('Category deleted successfully');
-    // Remove from local state after successful API call
-    setCategories(categories.filter(cat => cat.id !== categoryToDelete.id));
-    setShowDeleteModal(false);
-    setCategoryToDelete(null);
-    setError(null);
+  const confirmDeleteCategory = async () => {
+    if (!categoryToDelete) return;
     
-  } catch (err) {
-    console.error('Error deleting category:', err);
-    setError('Failed to delete category');
-    
-    // Fallback: remove from local state if API fails
-    setCategories(categories.filter(cat => cat.id !== categoryToDelete.id));
-    setShowDeleteModal(false);
-    setCategoryToDelete(null);
-  }
-};
+    try {
+      await axios.delete(`${backendUrl}/api/categories/${categoryToDelete.id}`, {
+        withCredentials: true
+      });
+
+      toast.success('Category deleted successfully');
+      // Refresh categories after deletion
+      const categoriesResponse = await axios.get(`${backendUrl}/api/categories`, {
+        withCredentials: true
+      });
+      setCategories(categoriesResponse.data?.data || []);
+      setShowDeleteModal(false);
+      setCategoryToDelete(null);
+      setError(null);
+      
+    } catch (err) {
+      console.error('Error deleting category:', err);
+      setError('Failed to delete category');
+      toast.error('Failed to delete category');
+    }
+  };
 
   const handleUpdateCategory = async (updatedCategory: Category) => {
-  try {
-    const response = await axios.patch(`${backendUrl}/api/categories/${updatedCategory.id}`, {
-      name: updatedCategory.name,
-      description: updatedCategory.description || ''
-    }, {
-      withCredentials: true,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+    try {
+      const response = await axios.patch(`${backendUrl}/api/categories/${updatedCategory.id}`, {
+        name: updatedCategory.name,
+        description: updatedCategory.description || ''
+      }, {
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
 
-    toast.success('Category updated successfully');
-    
-    // Extract the updated category from the response
-    const responseCategory = response.data?.data || response.data;
-    
-    // Update local state with the API response
-    const categoryWithDefaults: Category = {
-      ...responseCategory,
-      subcategories: responseCategory.subcategories || [],
-      directTasks: responseCategory.directTasks || []
-    };
-    
-    setCategories(categories.map(cat => 
-      cat.id === updatedCategory.id ? categoryWithDefaults : cat
-    ));
-    setShowEditCategoryModal(false);
-    setCategoryToEdit(null);
-    setError(null);
-    
-  } catch (err) {
-    console.error('Error updating category:', err);
-    setError('Failed to update category');
-    
-    // Fallback: update local state if API fails
-    setCategories(categories.map(cat => 
-      cat.id === updatedCategory.id ? updatedCategory : cat
-    ));
-    setShowEditCategoryModal(false);
-    setCategoryToEdit(null);
-  }
-};
-
+      toast.success('Category updated successfully');
+      
+      // Refresh categories after update
+      const categoriesResponse = await axios.get(`${backendUrl}/api/categories`, {
+        withCredentials: true
+      });
+      setCategories(categoriesResponse.data?.data || []);
+      setShowEditCategoryModal(false);
+      setCategoryToEdit(null);
+      setError(null);
+      
+    } catch (err) {
+      console.error('Error updating category:', err);
+      setError('Failed to update category');
+      toast.error('Failed to update category');
+    }
+  };
 
   const filteredCategories = Array.isArray(categories) 
     ? categories.filter(category => 
@@ -265,12 +210,15 @@ export default function NormalTasks() {
     : [];
 
   const totalCategories = Array.isArray(categories) ? categories.length : 0;
-  const totalTasks = Array.isArray(categories) ? categories.reduce((sum, category) => {
-    return sum + getCategoryStats(category).totalTasks;
-  }, 0) : 0;
-  const completedTasks = Array.isArray(categories) ? categories.reduce((sum, category) => {
-    return sum + getCategoryStats(category).completedTasks;
-  }, 0) : 0;
+  
+  // Calculate today's totals from all categories
+  const totalTodayTasks = Array.isArray(categories) 
+    ? categories.reduce((sum, category) => sum + category.totalAssignmentsToday, 0) 
+    : 0;
+  
+  const completedTodayTasks = Array.isArray(categories) 
+    ? categories.reduce((sum, category) => sum + category.completedAssignmentsToday, 0) 
+    : 0;
 
   if (showCategoryDetail && selectedCategory) {
     return (
@@ -281,9 +229,18 @@ export default function NormalTasks() {
           setSelectedCategory(null);
         }}
         onUpdateCategory={(updatedCategory: Category) => {
-          setCategories(categories.map(cat => 
-            cat.id === updatedCategory.id ? updatedCategory : cat
-          ));
+          // Refresh categories when updated
+          const fetchCategories = async () => {
+            try {
+              const response = await axios.get(`${backendUrl}/api/categories`, {
+                withCredentials: true
+              });
+              setCategories(response.data?.data || []);
+            } catch (err) {
+              console.error('Error refreshing categories:', err);
+            }
+          };
+          fetchCategories();
           setSelectedCategory(updatedCategory);
         }}
       />
@@ -349,8 +306,8 @@ export default function NormalTasks() {
         <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-shadow duration-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600 mb-2">Total Tasks</p>
-              <p className="text-3xl font-bold text-gray-900">{totalTasks}</p>
+              <p className="text-sm font-medium text-gray-600 mb-2">Today&apos;s Tasks</p>
+              <p className="text-3xl font-bold text-gray-900">{totalTodayTasks}</p>
             </div>
             <div className="flex items-center justify-center w-12 h-12 bg-indigo-50 rounded-lg">
               <DocumentTextIcon className="w-6 h-6 text-indigo-600" />
@@ -360,8 +317,8 @@ export default function NormalTasks() {
         <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-shadow duration-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600 mb-2">Completed Tasks</p>
-              <p className="text-3xl font-bold text-gray-900">{completedTasks}</p>
+              <p className="text-sm font-medium text-gray-600 mb-2">Completed Today</p>
+              <p className="text-3xl font-bold text-gray-900">{completedTodayTasks}</p>
             </div>
             <div className="flex items-center justify-center w-12 h-12 bg-green-50 rounded-lg">
               <CheckCircleIcon className="w-6 h-6 text-green-600" />
@@ -388,8 +345,9 @@ export default function NormalTasks() {
         {/* Categories Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredCategories.map((category) => {
-            const { totalTasks, completedTasks } = getCategoryStats(category);
-            const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+            const completionRate = category.totalAssignmentsToday > 0 
+              ? Math.round((category.completedAssignmentsToday / category.totalAssignmentsToday) * 100) 
+              : 0;
 
             return (
               <div
@@ -406,13 +364,10 @@ export default function NormalTasks() {
                       <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors truncate">
                         {category.name}
                       </h3>
-                      {category.description && (
-                        <p className="text-sm text-gray-500 truncate mt-1">{category.description}</p>
-                      )}
                     </div>
                   </div>
                   
-                  {/* Action Buttons - Always visible on desktop, show on hover for mobile */}
+                  {/* Action Buttons */}
                   <div className="flex items-center space-x-1 ml-3 flex-shrink-0">
                     <button
                       onClick={(e) => handleEditCategory(category, e)}
@@ -434,7 +389,7 @@ export default function NormalTasks() {
                 {/* Completion Rate */}
                 <div className="flex justify-end mb-4" onClick={() => handleCategoryClick(category)}>
                   <div className="text-right">
-                    <div className="text-sm font-medium text-gray-500">Completion</div>
+                    <div className="text-sm font-medium text-gray-500">Today&apos;s Completion</div>
                     <div className="text-lg font-bold text-blue-600">{completionRate}%</div>
                   </div>
                 </div>
@@ -442,16 +397,20 @@ export default function NormalTasks() {
                 {/* Stats */}
                 <div className="space-y-3 mb-4" onClick={() => handleCategoryClick(category)}>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Total Tasks</span>
-                    <span className="font-semibold text-gray-900">{totalTasks}</span>
+                    <span className="text-sm text-gray-600">Today&apos;s Tasks</span>
+                    <span className="font-semibold text-gray-900">{category.totalAssignmentsToday}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Completed</span>
-                    <span className="font-semibold text-green-600">{completedTasks}</span>
+                    <span className="text-sm text-gray-600">Completed Today</span>
+                    <span className="font-semibold text-green-600">{category.completedAssignmentsToday}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Pending Today</span>
+                    <span className="font-semibold text-orange-600">{category.pendingAssignmentsToday}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-gray-600">Subcategories</span>
-                    <span className="font-semibold text-indigo-600">{(category.subcategories || []).length}</span>
+                    <span className="font-semibold text-indigo-600">{category.subcategoryCount}</span>
                   </div>
                 </div>
 

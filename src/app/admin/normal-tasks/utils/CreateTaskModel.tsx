@@ -29,7 +29,7 @@ interface CreateTaskModalProps {
   onClose: () => void;
   onCreateTask: (taskData: Task) => void;
   isSubcategoryTask?: boolean;
-  categoryId?: number;
+  categoryId?: string;
   subcategoryId?: string | null;
 }
 

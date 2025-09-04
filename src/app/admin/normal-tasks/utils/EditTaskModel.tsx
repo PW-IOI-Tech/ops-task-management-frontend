@@ -86,7 +86,7 @@ interface EditTaskModalProps {
   onClose: () => void;
   onUpdateTask: (taskData: Task) => void;
   isSubcategoryTask?: boolean;
-  categoryId?: number;
+  categoryId?: string;
   subcategoryId?: string | null;
 }
 
