@@ -1,16 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { XMarkIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, CheckCircleIcon, ClockIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { Task } from '@/app/operation/utils/task';
+import { convertISTToUTC, convertUTCToIST } from '@/app/components/time';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 interface TaskFormData {
   title: string;
   description: string;
-  taskType: 'RECURRING'; // ✅ Fixed to only RECURRING
+  taskType: 'RECURRING';
   parameterType: 'NUMBER' | 'TEXT' | 'DATETIME' | 'DROPDOWN' | 'BOOLEAN' | 'COMMENT';
   parameterLabel: string;
   parameterUnit: string;
@@ -20,7 +21,7 @@ interface TaskFormData {
     days?: number;
     onDays?: string[];
     onDate?: number;
-    atTime: string;
+    atTime: string; // This will store IST time for UI display
   };
 }
 
@@ -32,6 +33,15 @@ interface CreateTaskModalProps {
   subcategoryId?: string | null;
 }
 
+// Get current IST time as default
+const getCurrentISTTime = (): string => {
+  const now = new Date();
+  // Convert current time to IST
+  const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30
+  const istTime = new Date(now.getTime() + istOffset);
+  return istTime.toTimeString().slice(0, 5);
+};
+
 export default function CreateTaskModal({ 
   onClose, 
   onCreateTask, 
@@ -42,7 +52,7 @@ export default function CreateTaskModal({
   const [formData, setFormData] = useState<TaskFormData>({
     title: '',
     description: '',
-    taskType: 'RECURRING', // ✅ Fixed to only RECURRING
+    taskType: 'RECURRING',
     parameterType: 'NUMBER',
     parameterLabel: '',
     parameterUnit: '',
@@ -50,13 +60,14 @@ export default function CreateTaskModal({
     repetitionConfig: {
       type: 'interval',
       days: 3,
-      atTime: '09:00'
+      atTime: '09:00' // Default IST time
     }
   });
 
   const [weeklyDays, setWeeklyDays] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [timeError, setTimeError] = useState<string | null>(null);
 
   const createTask = async (taskData: Record<string, unknown>) => {
     try {
@@ -82,48 +93,101 @@ export default function CreateTaskModal({
     );
   };
 
+  const isValidTime = (time: string): boolean => {
+    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    return timeRegex.test(time);
+  };
+
+  const handleTimeChange = (timeValue: string): void => {
+    setTimeError(null);
+    
+    if (timeValue && !isValidTime(timeValue)) {
+      setTimeError('Please enter a valid time in HH:MM format');
+      return;
+    }
+
+    setFormData({
+      ...formData,
+      repetitionConfig: {
+        ...formData.repetitionConfig,
+        atTime: timeValue
+      }
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+    setTimeError(null);
 
     try {
-      // Prepare repetition config based on type
+      // Validate required fields
+      if (!formData.title.trim()) {
+        setError('Task title is required');
+        setIsLoading(false);
+        return;
+      }
+
+      if (!formData.parameterLabel.trim()) {
+        setError('Parameter label is required');
+        setIsLoading(false);
+        return;
+      }
+
+      // Validate time format
+      const istTime = formData.repetitionConfig?.atTime || '09:00';
+      if (!isValidTime(istTime)) {
+        setTimeError('Please enter a valid time in HH:MM format');
+        setIsLoading(false);
+        return;
+      }
+
+      // Prepare repetition config based on type with UTC conversion
       let repetitionConfig = null;
       
       if (formData.repetitionConfig?.type === 'interval') {
         repetitionConfig = {
           type: 'interval',
-          days: formData.repetitionConfig.days,
-          atTime: formData.repetitionConfig.atTime
+          days: formData.repetitionConfig.days || 1,
+          // ✅ Convert IST time to UTC before sending to backend
+          atTime: convertISTToUTC(istTime)
         };
       } else if (formData.repetitionConfig?.type === 'weekly') {
+        if (weeklyDays.length === 0) {
+          setError('Please select at least one day for weekly repetition');
+          setIsLoading(false);
+          return;
+        }
+        
         repetitionConfig = {
           type: 'weekly',
-          onDays: weeklyDays,
-          atTime: formData.repetitionConfig.atTime
+          onDays: weeklyDays, // Keep as string array
+          // ✅ Convert IST time to UTC before sending to backend
+          atTime: convertISTToUTC(istTime)
         };
       } else if (formData.repetitionConfig?.type === 'monthly') {
         repetitionConfig = {
           type: 'monthly',
-          onDate: formData.repetitionConfig.onDate,
-          atTime: formData.repetitionConfig.atTime
+          onDate: formData.repetitionConfig.onDate || 1,
+          // ✅ Convert IST time to UTC before sending to backend
+          atTime: convertISTToUTC(istTime)
         };
       }
 
       const taskPayload = {
-        title: formData.title,
-        description: formData.description || undefined,
+        title: formData.title.trim(),
+        description: formData.description.trim() || undefined,
         categoryId: categoryId?.toString(),
         subcategoryId: isSubcategoryTask ? subcategoryId : undefined,
-        taskType: 'RECURRING', // ✅ Always RECURRING
+        taskType: 'RECURRING',
         parameterType: formData.parameterType,
-        parameterLabel: formData.parameterLabel,
-        parameterUnit: formData.parameterUnit || undefined,
+        parameterLabel: formData.parameterLabel.trim(),
+        parameterUnit: formData.parameterUnit.trim() || undefined,
         dropdownOptions: formData.parameterType === 'DROPDOWN' 
           ? formData.dropdownOptions.split(',').map(opt => opt.trim()).filter(Boolean)
           : undefined,
-        repetitionConfig: repetitionConfig // ✅ Always include repetition config
+        repetitionConfig: repetitionConfig
       };
 
       // Remove undefined values
@@ -131,7 +195,8 @@ export default function CreateTaskModal({
         Object.entries(taskPayload).filter(([_, value]) => value !== undefined)
       );
 
-      console.log('Task payload:', cleanPayload);
+      console.log('Task payload (UTC time):', cleanPayload);
+      console.log('Original IST time:', istTime, '-> UTC time:', convertISTToUTC(istTime));
 
       const createdTask = await createTask(cleanPayload);
       onCreateTask(createdTask);
@@ -179,7 +244,7 @@ export default function CreateTaskModal({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* ✅ Error Display */}
+          {/* Error Display */}
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
               <div className="flex">
@@ -221,7 +286,7 @@ export default function CreateTaskModal({
             </div>
           </div>
 
-          {/* ✅ Task Type - Now shows only recurring task info */}
+          {/* Task Type */}
           <div className="space-y-4">
             <h4 className="text-lg font-semibold text-gray-700 border-b pb-2">Task Configuration</h4>
             
@@ -299,7 +364,7 @@ export default function CreateTaskModal({
             )}
           </div>
 
-          {/* ✅ Schedule Configuration - Only for recurring tasks */}
+          {/* Schedule Configuration */}
           <div className="space-y-4">
             <h4 className="text-lg font-semibold text-gray-700 border-b pb-2">Schedule Configuration</h4>
             
@@ -310,7 +375,7 @@ export default function CreateTaskModal({
                 onChange={(e) => setFormData({
                   ...formData,
                   repetitionConfig: {
-                    ...formData.repetitionConfig!,
+                    ...formData.repetitionConfig,
                     type: e.target.value as 'interval' | 'weekly' | 'monthly'
                   }
                 })}
@@ -334,7 +399,7 @@ export default function CreateTaskModal({
                   onChange={(e) => setFormData({
                     ...formData,
                     repetitionConfig: {
-                      ...formData.repetitionConfig!,
+                      ...formData.repetitionConfig,
                       days: parseInt(e.target.value) || 1
                     }
                   })}
@@ -361,6 +426,9 @@ export default function CreateTaskModal({
                     </label>
                   ))}
                 </div>
+                {formData.repetitionConfig?.type === 'weekly' && weeklyDays.length === 0 && (
+                  <p className="text-xs text-red-500 mt-1">Please select at least one day</p>
+                )}
               </div>
             )}
 
@@ -375,7 +443,7 @@ export default function CreateTaskModal({
                   onChange={(e) => setFormData({
                     ...formData,
                     repetitionConfig: {
-                      ...formData.repetitionConfig!,
+                      ...formData.repetitionConfig,
                       onDate: parseInt(e.target.value) || 1
                     }
                   })}
@@ -386,21 +454,38 @@ export default function CreateTaskModal({
               </div>
             )}
 
+            {/* ✅ Enhanced Time Input with IST indication and UTC preview */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Time *</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <div className="flex items-center">
+                  <ClockIcon className="w-4 h-4 mr-1" />
+                  Time (IST) *
+                </div>
+              </label>
               <input
                 type="time"
                 value={formData.repetitionConfig?.atTime || '09:00'}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  repetitionConfig: {
-                    ...formData.repetitionConfig!,
-                    atTime: e.target.value
-                  }
-                })}
-                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                onChange={(e) => handleTimeChange(e.target.value)}
+                className={`w-full border rounded-lg px-4 py-3 text-black focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
+                  timeError 
+                    ? 'border-red-300 focus:ring-red-500' 
+                    : 'border-gray-300 focus:ring-blue-500'
+                }`}
                 disabled={isLoading}
               />
+              <div className="mt-1 flex items-center justify-between">
+                <p className="text-xs text-gray-500">
+                  Time will be converted to UTC for storage
+                </p>
+                {formData.repetitionConfig?.atTime && (
+                  <p className="text-xs text-blue-600">
+                    UTC: {convertISTToUTC(formData.repetitionConfig.atTime)}
+                  </p>
+                )}
+              </div>
+              {timeError && (
+                <p className="text-xs text-red-500 mt-1">{timeError}</p>
+              )}
             </div>
           </div>
 
@@ -415,7 +500,7 @@ export default function CreateTaskModal({
             </button>
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || !!timeError}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-150 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (

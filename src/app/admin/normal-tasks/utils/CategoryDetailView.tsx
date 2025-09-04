@@ -24,7 +24,8 @@ import axios from 'axios';
 import AssignMemberModal from './AssignMemberModel';
 import TaskViewModal from './TaskViewModel';
 import { ParameterType, Task,Subcategory, Category } from './types';
-import {toast} from 'react-toastify'
+import {toast} from 'react-toastify';
+import { convertUTCToIST } from './EditTaskModel';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -379,7 +380,7 @@ const refetchData = async () => {
       }
     } catch (error) {
       console.error('Failed to delete task:', error);
-      alert('Failed to delete task. Please try again.');
+     
       return; // Exit early on API failure
     }
   } else if (deleteType === 'subcategory') {
@@ -388,7 +389,7 @@ const refetchData = async () => {
       updatedCategory.subcategories = updatedCategory.subcategories.filter(sub => sub.id !== itemToDelete.id);
     } catch (error) {
       console.error('Failed to delete subcategory:', error);
-      alert('Failed to delete subcategory. Please try again.');
+     
       return;
     }
   }
@@ -424,13 +425,13 @@ const refetchData = async () => {
   const getScheduleText = (task: Task): string => {
     console.log("Task Printing",task)
     if(task.repetitionConfig.type ==='interval'){
-      return `Every ${task.repetitionConfig.days} days at ${task.repetitionConfig.atTime}`;
+      return `Every ${task.repetitionConfig.days} days at ${convertUTCToIST(task.repetitionConfig.atTime || '')}`;
     }
     else if(task.repetitionConfig.type ==='weekly'){
-      return `Every ${task.repetitionConfig.onDays?.join(', ')} of the week at ${task.repetitionConfig.atTime}`;
+      return `Every ${task.repetitionConfig.onDays?.join(', ')} of the week at ${convertUTCToIST(task.repetitionConfig.atTime || '')}`;
     }
       else if(task.repetitionConfig.type ==='monthly'){
-        return `On day ${task.repetitionConfig.onDate}th of every month at ${task.repetitionConfig.atTime}`;
+        return `On day ${task.repetitionConfig.onDate}th of every month at ${convertUTCToIST(task.repetitionConfig.atTime || '')}`;
       }
    
     
