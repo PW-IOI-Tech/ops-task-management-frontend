@@ -36,9 +36,9 @@ export default function EditSubcategoryModal({ subcategory, onClose, onUpdateSub
         }
       });
       
+      toast.success('Subcategory updated successfully');  
       return response.data;
       
-      toast.success('Subcategory updated successfully');
 
     } catch (error) {
       toast.error('Error updating subcategory');

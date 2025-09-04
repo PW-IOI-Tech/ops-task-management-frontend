@@ -7,69 +7,36 @@ import { Assignment } from './utils/types';
 
 const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
-// Interface to match the API response structure
-// interface Assignment {
-//   id: string;
-//   taskId: string;
-//   scheduleId: string | null;
-//   assignedTo: string;
-//   assignedBy: string;
-//   status: 'PENDING' | 'COMPLETED';
-//   parameterValue: string | null;
-//   comment: string | null;
-//   completedAt: string | null;
-//   createdAt: string;
-//   updatedAt: string;
-//   task: {
-//     id: string;
-//     title: string;
-//     description: string | null;
-//     categoryId: string | null;
-//     subcategoryId: string | null;
-//     createdBy: string;
-//     taskType: 'ADHOC' | 'RECURRING';
-//     parameterType: 'NUMBER' | 'TEXT' | 'BOOLEAN' | 'DROPDOWN' | 'COMMENT' | 'DATETIME';
-//     parameterLabel: string;
-//     parameterUnit: string | null;
-//     parameterIsRequired: boolean;
-//     dropdownOptions: string[];
-//     dueDate: string | null; // For ADHOC tasks
-//     nextDueDate: string | null;
-//     category: {
-//       id: string;
-//       name: string;
-//       description: string | null;
-//     } | null;
-//     subcategory: {
-//       id: string;
-//       name: string;
-//       description: string | null;
-//     } | null;
-//   };
-//   schedule: {
-//     scheduledDate: string; // For RECURRING tasks
-//   } | null;
-// }
-
 const Page: React.FC = () => {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Helper function to check if a date is today
-  const isToday = (dateString: string): boolean => {
-  const today = new Date();
-  const date = new Date(dateString);
-
-  return (
-    date.getUTCFullYear() === today.getUTCFullYear() &&
-    date.getUTCMonth() === today.getUTCMonth() &&
-    date.getUTCDate() === today.getUTCDate()
-  );
-};
+ 
 
 
-  // Helper function to filter today's tasks
+  const isTodayISTImproved = (utcDateString: string): boolean => {
+    try {
+      // Get today's date in IST
+      const today = new Date();
+      const todayISTString = today.toLocaleDateString('en-CA', {
+        timeZone: 'Asia/Kolkata',
+      }); // Returns YYYY-MM-DD format
+      
+      // Convert assignment date to IST
+      const assignmentDate = new Date(utcDateString);
+      const assignmentISTString = assignmentDate.toLocaleDateString('en-CA', {
+        timeZone: 'Asia/Kolkata',
+      }); // Returns YYYY-MM-DD format
+      
+      return todayISTString === assignmentISTString;
+    } catch (error) {
+      console.error('Error checking IST date:', error);
+      return false;
+    }
+  };
+
+ 
   const filterTodayTasks = (allAssignments: Assignment[]): Assignment[] => {
     return allAssignments.filter(assignment => {
       let taskDate: string | null = null;
@@ -79,9 +46,13 @@ const Page: React.FC = () => {
       } else if (assignment.task.taskType === 'RECURRING') {
         taskDate = assignment.schedule?.scheduledDate || null;
       }
+      // subtract 1 day 
+      
 
-      // Return true only if the task is due today
-      return taskDate ? isToday(taskDate) : false;
+
+
+     
+      return taskDate ? isTodayISTImproved(taskDate) : false;
     });
   };
 
@@ -99,12 +70,33 @@ const Page: React.FC = () => {
 
       if (response.data.success) {
         const allAssignments = response.data.data;
-        // Store all assignments (not filtered by date)
         setAssignments(allAssignments);
         
-        // Log the counts for debugging
+        // ✅ Updated logging to show IST-based filtering
         const todayAssignments = filterTodayTasks(allAssignments);
-        console.log(`Fetched ${allAssignments.length} total assignments, ${todayAssignments.length} due today`);
+        const currentISTTime = new Date().toLocaleString('en-US', {
+          timeZone: 'Asia/Kolkata',
+          dateStyle: 'full',
+          timeStyle: 'short'
+        });
+        
+        console.log(`Current IST time: ${currentISTTime}`);
+        console.log(`Fetched ${allAssignments.length} total assignments, ${todayAssignments.length} due today (IST)`);
+        
+        // Debug: Log some assignment dates for verification
+        allAssignments.slice(0, 3).forEach((assignment: Assignment, index: number) => {
+          const taskDate = assignment.task.taskType === 'ADHOC'
+            ? assignment.task.dueDate
+            : assignment.schedule?.scheduledDate;
+          if (taskDate) {
+            const istDate = new Date(taskDate).toLocaleString('en-US', {
+              timeZone: 'Asia/Kolkata',
+              dateStyle: 'short',
+              timeStyle: 'short'
+            });
+            console.log(`Assignment ${index + 1}: UTC=${taskDate} → IST=${istDate}`);
+          }
+        });
       } else {
         setError('Failed to fetch assignments');
       }
@@ -120,7 +112,6 @@ const Page: React.FC = () => {
     fetchAssignments();
   }, []);
 
-  // Update assignment in state after API operations
   const handleUpdateTask = (assignmentId: string, updatedFields: Partial<Assignment>): void => {
     setAssignments(prevAssignments => 
       prevAssignments.map(assignment => 
@@ -131,7 +122,6 @@ const Page: React.FC = () => {
     );
   };
 
-  // Remove completed assignment from state
   const handleCompleteTask = (assignmentId: string): void => {
     setAssignments(prevAssignments => 
       prevAssignments.filter(assignment => assignment.id !== assignmentId)
@@ -140,11 +130,10 @@ const Page: React.FC = () => {
 
   const handleSaveTask = (assignmentId: string): void => {
     console.log('Task completed with assignment ID:', assignmentId);
-    // Refresh assignments after completion
     fetchAssignments();
   };
 
-  // Filter today's assignments for TaskOverview
+  // ✅ Filter today's assignments based on IST
   const todayAssignments = filterTodayTasks(assignments);
 
   // Show loading state
@@ -192,6 +181,8 @@ const Page: React.FC = () => {
 
   return (
     <div className="p-8">
+     
+
       {/* MyTasks receives ALL assignments */}
       <MyTasks 
         assignments={assignments}
@@ -199,7 +190,7 @@ const Page: React.FC = () => {
         onRefresh={fetchAssignments}
       />
       
-      {/* TaskOverview receives only TODAY'S assignments */}
+      {/* TaskOverview receives only TODAY'S assignments (IST-based) */}
       <TaskOverview 
         assignments={todayAssignments}
         loading={loading}
