@@ -1,13 +1,74 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { XMarkIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, CheckCircleIcon, ClockIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
-import {Task,RepetitionConfig } from './types';
+import { Task, RepetitionConfig } from './types';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 type ParameterType = 'NUMBER' | 'TEXT' | 'DATETIME' | 'DROPDOWN' | 'BOOLEAN' | 'COMMENT';
+
+
+export const convertUTCToIST = (utcTime: string): string => {
+  if (!utcTime) return '09:00';
+  
+  try {
+    const [hours, minutes] = utcTime.split(':').map(Number);
+    
+    let totalMinutes = (hours * 60) + minutes;
+   
+    totalMinutes += 330;
+    
+   
+    if (totalMinutes >= 1440) {
+      totalMinutes -= 1440;
+    }
+    
+    const istHours = Math.floor(totalMinutes / 60);
+    const istMinutes = totalMinutes % 60;
+    
+    return `${String(istHours).padStart(2, '0')}:${String(istMinutes).padStart(2, '0')}`;
+  } catch (error) {
+    console.error('Error converting UTC to IST:', error);
+    return '09:00';
+  }
+};
+
+export const convertISTToUTC = (istTime: string): string => {
+  if (!istTime) return '03:30';
+  
+  try {
+    const [hours, minutes] = istTime.split(':').map(Number);
+    
+    // Convert to total minutes
+    let totalMinutes = (hours * 60) + minutes;
+    
+    // Subtract IST offset: -5 hours 30 minutes = -330 minutes
+    totalMinutes -= 330;
+    
+    // Handle negative overflow (previous day)
+    if (totalMinutes < 0) {
+      totalMinutes += 1440; // Add 24 hours
+    }
+    
+    // Convert back to hours and minutes
+    const utcHours = Math.floor(totalMinutes / 60);
+    const utcMinutes = totalMinutes % 60;
+    
+    return `${String(utcHours).padStart(2, '0')}:${String(utcMinutes).padStart(2, '0')}`;
+  } catch (error) {
+    console.error('Error converting IST to UTC:', error);
+    return '03:30';
+  }
+};
+
+
+
+const isValidTime = (time: string): boolean => {
+  const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+  return timeRegex.test(time);
+};
 
 interface TaskFormData {
   title: string;
@@ -25,7 +86,7 @@ interface EditTaskModalProps {
   onClose: () => void;
   onUpdateTask: (taskData: Task) => void;
   isSubcategoryTask?: boolean;
-  categoryId?: number;
+  categoryId?: string;
   subcategoryId?: string | null;
 }
 
@@ -33,6 +94,7 @@ interface WeekDay {
   key: string;
   label: string;
 }
+
 interface UpdateTaskPayload {
   title?: string;
   description?: string;
@@ -46,7 +108,6 @@ interface UpdateTaskPayload {
   repetitionConfig?: RepetitionConfig;
 }
 
-
 export default function EditTaskModal({ 
   task,
   onClose, 
@@ -58,7 +119,7 @@ export default function EditTaskModal({
   const [formData, setFormData] = useState<TaskFormData>({
     title: '',
     description: '',
-    taskType: 'RECURRING', // ✅ Fixed to only RECURRING
+    taskType: 'RECURRING',
     parameterType: 'NUMBER',
     parameterLabel: '',
     parameterUnit: '',
@@ -66,64 +127,63 @@ export default function EditTaskModal({
     repetitionConfig: {
       type: 'interval',
       days: 3,
-      atTime: '09:00'
+      atTime: '09:00' // Default IST time for display
     }
   });
 
   const [weeklyDays, setWeeklyDays] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [timeError, setTimeError] = useState<string | null>(null);
 
-  // ✅ Initialize form with existing task data
-  // ✅ Initialize form with existing task data
-useEffect(() => {
-  if (task) {
-    setFormData({
-      title: task.title || '',
-      description: task.description || '',
-      taskType: 'RECURRING',
-      parameterType: task.parameterType || 'NUMBER',
-      parameterLabel: task.parameterLabel || '',
-      parameterUnit: task.parameterUnit || '',
-      dropdownOptions: Array.isArray(task.dropdownOptions) 
-        ? task.dropdownOptions.join(', ') 
-        : (task.dropdownOptions || ''),
-      repetitionConfig: (task.repetitionConfig && ['interval', 'weekly', 'monthly'].includes(task.repetitionConfig.type as string))
-        ? {
-            ...task.repetitionConfig,
-            type: task.repetitionConfig.type as 'interval' | 'weekly' | 'monthly'
-          }
-        : {
-            type: 'interval',
-            days: 3,
-            atTime: '09:00'
-          }
-    });
+  // ✅ Initialize form with existing task data, converting UTC to IST for display
+  useEffect(() => {
+    if (task) {
+      // Convert UTC time from backend to IST for display
+      const displayTime = task.repetitionConfig?.atTime 
+        ? convertUTCToIST(task.repetitionConfig.atTime)
+        : '09:00';
 
-    // ✅ FIXED: Set weekly days if available - handle both string array and number array
-    if (task.repetitionConfig?.onDays) {
-      if (Array.isArray(task.repetitionConfig.onDays)) {
-        // If it's already string array, use directly
-        if (typeof task.repetitionConfig.onDays[0] === 'string') {
-          setWeeklyDays(task.repetitionConfig.onDays as string[]);
-        } 
-        // If it's number array, convert to strings
-        else if (typeof task.repetitionConfig.onDays[0] === 'number') {
-          const dayMap: { [key: number]: string } = {
-            1: 'MON',
-            2: 'TUE',
-            3: 'WED',
-            4: 'THU',
-            5: 'FRI',
-            6: 'SAT',
-            7: 'SUN'
-          };
-          setWeeklyDays(task.repetitionConfig.onDays.map(day => dayMap[parseInt(day, 10)]).filter(Boolean));
+      setFormData({
+        title: task.title || '',
+        description: task.description || '',
+        taskType: 'RECURRING',
+        parameterType: task.parameterType || 'NUMBER',
+        parameterLabel: task.parameterLabel || '',
+        parameterUnit: task.parameterUnit || '',
+        dropdownOptions: Array.isArray(task.dropdownOptions) 
+          ? task.dropdownOptions.join(', ') 
+          : (task.dropdownOptions || ''),
+        repetitionConfig: (task.repetitionConfig && ['interval', 'weekly', 'monthly'].includes(task.repetitionConfig.type as string))
+          ? {
+              ...task.repetitionConfig,
+              type: task.repetitionConfig.type as 'interval' | 'weekly' | 'monthly',
+              // ✅ Convert UTC time to IST for display
+              atTime: displayTime
+            }
+          : {
+              type: 'interval',
+              days: 3,
+              atTime: '09:00'
+            }
+      });
+
+      // Handle weekly days initialization
+      if (task.repetitionConfig?.onDays) {
+        if (Array.isArray(task.repetitionConfig.onDays)) {
+          if (typeof task.repetitionConfig.onDays[0] === 'string') {
+            setWeeklyDays(task.repetitionConfig.onDays as string[]);
+          } else if (typeof task.repetitionConfig.onDays[0] === 'number') {
+            const dayMap: { [key: number]: string } = {
+              1: 'MON', 2: 'TUE', 3: 'WED', 4: 'THU',
+              5: 'FRI', 6: 'SAT', 7: 'SUN'
+            };
+            setWeeklyDays(task.repetitionConfig.onDays.map(day => dayMap[parseInt(day, 10)]).filter(Boolean));
+          }
         }
       }
     }
-  }
-}, [task]);
+  }, [task]);
 
   const updateTask = async (taskId: string, updateData: UpdateTaskPayload): Promise<Task> => {
     try {
@@ -149,75 +209,122 @@ useEffect(() => {
     );
   };
 
- const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
-  e.preventDefault();
-  setIsLoading(true);
-  setError(null);
-
-  try {
-    // Prepare repetition config based on type
-    let repetitionConfig: RepetitionConfig | null = null;
+  const handleTimeChange = (timeValue: string): void => {
+    setTimeError(null);
     
-    if (formData.repetitionConfig?.type === 'interval') {
-      repetitionConfig = {
-        type: 'interval',
-        days: formData.repetitionConfig.days || 1,
-        atTime: formData.repetitionConfig.atTime
-      };
-    } else if (formData.repetitionConfig?.type === 'weekly') {
-      // ✅ FIXED: Send day strings directly instead of converting to numbers
-      repetitionConfig = {
-        type: 'weekly',
-        onDays: weeklyDays, // Keep as string array: ["MON", "WED", "FRI"]
-        atTime: formData.repetitionConfig.atTime
-      };
-    } else if (formData.repetitionConfig?.type === 'monthly') {
-      repetitionConfig = {
-        type: 'monthly',
-        onDate: formData.repetitionConfig.onDate || 1,
-        atTime: formData.repetitionConfig.atTime
-      };
+    if (timeValue && !isValidTime(timeValue)) {
+      setTimeError('Please enter a valid time in HH:MM format');
+      return;
     }
 
-    const updatePayload: UpdateTaskPayload = {
-      title: formData.title,
-      description: formData.description || undefined,
-      categoryId: categoryId?.toString(),
-      subcategoryId: isSubcategoryTask ? subcategoryId || undefined : undefined,
-      taskType: 'RECURRING',
-      parameterType: formData.parameterType,
-      parameterLabel: formData.parameterLabel,
-      parameterUnit: formData.parameterUnit || undefined,
-      dropdownOptions: formData.parameterType === 'DROPDOWN' 
-        ? formData.dropdownOptions.split(',').map(opt => opt.trim()).filter(Boolean)
-        : undefined,
-      repetitionConfig: repetitionConfig || undefined
-    };
+    setFormData({
+      ...formData,
+      repetitionConfig: {
+        ...formData.repetitionConfig,
+        atTime: timeValue
+      }
+    });
+  };
 
-    // Remove undefined values
-    const cleanPayload: UpdateTaskPayload = Object.fromEntries(
-      Object.entries(updatePayload).filter(([_, value]) => value !== undefined)
-    ) as UpdateTaskPayload;
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+    setTimeError(null);
 
-    console.log('Update payload:', cleanPayload);
+    try {
+      // Validate required fields
+      if (!formData.title.trim()) {
+        setError('Task title is required');
+        setIsLoading(false);
+        return;
+      }
 
-    const updatedTask = await updateTask(task.id, cleanPayload);
-    onUpdateTask(updatedTask);
-    onClose();
-  } catch (error) {
-    console.error('Failed to update task:', error);
-    if (axios.isAxiosError(error) && error.response?.data?.message) {
-      setError(error.response.data.message);
-    } else if (error instanceof Error) {
-      setError(error.message);
-    } else {
-      setError('Failed to update task. Please try again.');
+      if (!formData.parameterLabel.trim()) {
+        setError('Parameter label is required');
+        setIsLoading(false);
+        return;
+      }
+
+      // Validate time format
+      const istTime = formData.repetitionConfig?.atTime || '09:00';
+      if (!isValidTime(istTime)) {
+        setTimeError('Please enter a valid time in HH:MM format');
+        setIsLoading(false);
+        return;
+      }
+
+      // Prepare repetition config based on type with UTC conversion
+      let repetitionConfig: RepetitionConfig | null = null;
+      
+      if (formData.repetitionConfig?.type === 'interval') {
+        repetitionConfig = {
+          type: 'interval',
+          days: formData.repetitionConfig.days || 1,
+          // ✅ Convert IST time to UTC before sending to backend
+          atTime: convertISTToUTC(istTime)
+        };
+      } else if (formData.repetitionConfig?.type === 'weekly') {
+        if (weeklyDays.length === 0) {
+          setError('Please select at least one day for weekly repetition');
+          setIsLoading(false);
+          return;
+        }
+        
+        repetitionConfig = {
+          type: 'weekly',
+          onDays: weeklyDays, // Keep as string array: ["MON", "WED", "FRI"]
+          // ✅ Convert IST time to UTC before sending to backend
+          atTime: convertISTToUTC(istTime)
+        };
+      } else if (formData.repetitionConfig?.type === 'monthly') {
+        repetitionConfig = {
+          type: 'monthly',
+          onDate: formData.repetitionConfig.onDate || 1,
+          // ✅ Convert IST time to UTC before sending to backend
+          atTime: convertISTToUTC(istTime)
+        };
+      }
+
+      const updatePayload: UpdateTaskPayload = {
+        title: formData.title.trim(),
+        description: formData.description.trim() || undefined,
+        categoryId: categoryId?.toString(),
+        subcategoryId: isSubcategoryTask ? subcategoryId || undefined : undefined,
+        taskType: 'RECURRING',
+        parameterType: formData.parameterType,
+        parameterLabel: formData.parameterLabel.trim(),
+        parameterUnit: formData.parameterUnit.trim() || undefined,
+        dropdownOptions: formData.parameterType === 'DROPDOWN' 
+          ? formData.dropdownOptions.split(',').map(opt => opt.trim()).filter(Boolean)
+          : undefined,
+        repetitionConfig: repetitionConfig || undefined
+      };
+
+      // Remove undefined values
+      const cleanPayload: UpdateTaskPayload = Object.fromEntries(
+        Object.entries(updatePayload).filter(([_, value]) => value !== undefined)
+      ) as UpdateTaskPayload;
+
+      console.log('Update payload (UTC time):', cleanPayload);
+      console.log('Original IST time:', istTime, '-> UTC time:', convertISTToUTC(istTime));
+
+      const updatedTask = await updateTask(task.id, cleanPayload);
+      onUpdateTask(updatedTask);
+      onClose();
+    } catch (error) {
+      console.error('Failed to update task:', error);
+      if (axios.isAxiosError(error) && error.response?.data?.message) {
+        setError(error.response.data.message);
+      } else if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError('Failed to update task. Please try again.');
+      }
+    } finally {
+      setIsLoading(false);
     }
-  } finally {
-    setIsLoading(false);
-  }
-};
-
+  };
 
   const weekDays: WeekDay[] = [
     { key: 'MON', label: 'Monday' },
@@ -248,7 +355,7 @@ useEffect(() => {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* ✅ Error Display */}
+          {/* Error Display */}
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
               <div className="flex">
@@ -290,11 +397,10 @@ useEffect(() => {
             </div>
           </div>
 
-          {/* ✅ Task Type Section - Removed, now always recurring */}
+          {/* Task Type */}
           <div className="space-y-4">
             <h4 className="text-lg font-semibold text-gray-700 border-b pb-2">Task Configuration</h4>
             
-            {/* ✅ Show that this is a recurring task */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex items-center">
                 <CheckCircleIcon className="w-5 h-5 text-blue-600 mr-2" />
@@ -369,7 +475,7 @@ useEffect(() => {
             )}
           </div>
 
-          {/* ✅ Schedule Configuration - Only for recurring tasks */}
+          {/* Schedule Configuration */}
           <div className="space-y-4">
             <h4 className="text-lg font-semibold text-gray-700 border-b pb-2">Schedule Configuration</h4>
             
@@ -380,7 +486,7 @@ useEffect(() => {
                 onChange={(e) => setFormData({
                   ...formData,
                   repetitionConfig: {
-                    ...formData.repetitionConfig!,
+                    ...formData.repetitionConfig,
                     type: e.target.value as 'interval' | 'weekly' | 'monthly'
                   }
                 })}
@@ -404,7 +510,7 @@ useEffect(() => {
                   onChange={(e) => setFormData({
                     ...formData,
                     repetitionConfig: {
-                      ...formData.repetitionConfig!,
+                      ...formData.repetitionConfig,
                       days: parseInt(e.target.value) || 1
                     }
                   })}
@@ -431,6 +537,9 @@ useEffect(() => {
                     </label>
                   ))}
                 </div>
+                {formData.repetitionConfig?.type === 'weekly' && weeklyDays.length === 0 && (
+                  <p className="text-xs text-red-500 mt-1">Please select at least one day</p>
+                )}
               </div>
             )}
 
@@ -445,7 +554,7 @@ useEffect(() => {
                   onChange={(e) => setFormData({
                     ...formData,
                     repetitionConfig: {
-                      ...formData.repetitionConfig!,
+                      ...formData.repetitionConfig,
                       onDate: parseInt(e.target.value) || 1
                     }
                   })}
@@ -456,21 +565,38 @@ useEffect(() => {
               </div>
             )}
 
+            {/* ✅ Enhanced Time Input with IST indication and UTC preview */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Time *</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <div className="flex items-center">
+                  <ClockIcon className="w-4 h-4 mr-1" />
+                  Time (IST) *
+                </div>
+              </label>
               <input
                 type="time"
                 value={formData.repetitionConfig?.atTime || '09:00'}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  repetitionConfig: {
-                    ...formData.repetitionConfig!,
-                    atTime: e.target.value
-                  }
-                })}
-                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                onChange={(e) => handleTimeChange(e.target.value)}
+                className={`w-full border rounded-lg px-4 py-3 text-black focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
+                  timeError 
+                    ? 'border-red-300 focus:ring-red-500' 
+                    : 'border-gray-300 focus:ring-blue-500'
+                }`}
                 disabled={isLoading}
               />
+              <div className="mt-1 flex items-center justify-between">
+                <p className="text-xs text-gray-500">
+                  Time will be converted to UTC for storage
+                </p>
+                {formData.repetitionConfig?.atTime && (
+                  <p className="text-xs text-blue-600">
+                    UTC: {convertISTToUTC(formData.repetitionConfig.atTime)}
+                  </p>
+                )}
+              </div>
+              {timeError && (
+                <p className="text-xs text-red-500 mt-1">{timeError}</p>
+              )}
             </div>
           </div>
 
@@ -485,7 +611,7 @@ useEffect(() => {
             </button>
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || !!timeError}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-150 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
