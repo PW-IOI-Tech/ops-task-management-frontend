@@ -83,11 +83,12 @@ const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
           subcategory: apiTask.subcategory,
           parameterLabel: apiTask.parameterLabel,
           parameterUnit: apiTask.parameterUnit,
+          dropdownOptions: apiTask.dropdownOptions || [],
           dueDate: apiTask.dueDate,
           isAssigned: apiTask.isAssigned,
           assignedTo: apiTask.assignedTo || [],
           createdBy: apiTask.createdBy,
-          status: 'pending' // Default status since not in API response
+          status: 'pending' 
           ,
 
           taskId: apiTask.taskId,
