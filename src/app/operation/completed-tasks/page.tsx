@@ -3,14 +3,11 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Search, Filter, Eye, Edit, Calendar, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
-import {toast} from 'react-toastify';
+import { toast } from 'react-toastify';
 import { Assignment } from '../utils/types';
-
-// Updated interface to match your backend Assignment structure
 
 type TaskFilter = 'all' | 'ADHOC' | 'RECURRING';
 
-// Next.js App Router page component - no custom props needed
 export default function CompletedTasksPage() {
   const router = useRouter();
   const [completedTasks, setCompletedTasks] = useState<Assignment[]>([]);
@@ -27,7 +24,68 @@ export default function CompletedTasksPage() {
 
   const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
-  // Helper function to filter completed tasks
+  // ✅ ADDED: IST timezone conversion utilities
+  const convertUTCToIST = (utcDateString: string): Date => {
+    try {
+      const utcDate = new Date(utcDateString);
+      return new Date(utcDate.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+    } catch (error) {
+      console.error('Error converting UTC to IST:', error);
+      return new Date();
+    }
+  };
+
+  const convertISTToUTC = (istDateString: string): string => {
+    try {
+      // Create date object treating input as IST
+      const istDate = new Date(istDateString);
+      
+      // Convert to UTC by subtracting IST offset (5.5 hours)
+      const utcDate = new Date(istDate.getTime() - (5.5 * 60 * 60 * 1000));
+      
+      return utcDate.toISOString();
+    } catch (error) {
+      console.error('Error converting IST to UTC:', error);
+      return new Date().toISOString();
+    }
+  };
+
+  // ✅ UPDATED: Format date to show in IST
+  const formatDateIST = (utcDateString: string): string => {
+    try {
+      const utcDate = new Date(utcDateString);
+      return utcDate.toLocaleDateString('en-GB', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+    } catch (error) {
+      console.error('Error formatting date in IST:', error);
+      return '-';
+    }
+  };
+
+  // ✅ ADDED: Format date and time to show in IST
+  const formatDateTimeIST = (utcDateString: string): string => {
+    try {
+      const utcDate = new Date(utcDateString);
+      return utcDate.toLocaleString('en-GB', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      }) + ' IST';
+    } catch (error) {
+      console.error('Error formatting datetime in IST:', error);
+      return '-';
+    }
+  };
+
+  // ✅ UPDATED: Helper function to filter completed tasks
   const filterCompletedTasks = (allAssignments: Assignment[]): Assignment[] => {
     return allAssignments.filter(assignment => assignment.status === 'COMPLETED');
   };
@@ -38,7 +96,6 @@ export default function CompletedTasksPage() {
       setLoading(true);
       setError(null);
       
-      // Fetch all assignments without status filter
       const response = await axios.get(`${backendURL}/api/assignments`, {
         withCredentials: true,
         headers: {
@@ -48,10 +105,12 @@ export default function CompletedTasksPage() {
 
       if (response.data.success) {
         const allAssignments = response.data.data;
-        // Filter to only get completed tasks
         const completedAssignments = filterCompletedTasks(allAssignments);
         setCompletedTasks(completedAssignments);
+        
+        // ✅ UPDATED: Log with IST timezone info
         console.log(`Fetched ${allAssignments.length} total assignments, ${completedAssignments.length} completed`);
+        console.log(`Current IST time: ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })}`);
       } else {
         setError('Failed to fetch completed tasks');
       }
@@ -76,48 +135,64 @@ export default function CompletedTasksPage() {
     setShowTaskDetail(true);
   };
 
-const handleInputClick = (task: Assignment): void => {
-  setSelectedTask(task);
-  
-  // Handle different parameter types for initial values
-  let initialValue = task.parameterValue || '';
-  
-  if (task.task.parameterType === 'DATETIME' && task.parameterValue) {
-    try {
-      // Convert UTC datetime back to local datetime-local format
-      const utcDate = new Date(task.parameterValue);
-      if (!isNaN(utcDate.getTime())) {
-        // Format for datetime-local input (YYYY-MM-DDTHH:mm)
-        const localDateTime = new Date(utcDate.getTime() - utcDate.getTimezoneOffset() * 60000);
-        initialValue = localDateTime.toISOString().slice(0, 16);
+  // ✅ UPDATED: Handle input click with proper IST conversion for datetime
+  const handleInputClick = (task: Assignment): void => {
+    setSelectedTask(task);
+    
+    let initialValue = task.parameterValue || '';
+    
+    if (task.task.parameterType === 'DATETIME' && task.parameterValue) {
+      try {
+        // Convert UTC datetime to IST for display in datetime-local input
+        const utcDate = new Date(task.parameterValue);
+        if (!isNaN(utcDate.getTime())) {
+          // Get IST time
+          const istDateTime = new Date(utcDate.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+          // Format for datetime-local input (YYYY-MM-DDTHH:mm)
+          initialValue = istDateTime.toISOString().slice(0, 16);
+        }
+      } catch (error) {
+        console.error('Error parsing existing datetime value:', error);
+        initialValue = '';
       }
-    } catch (error) {
-      console.error('Error parsing existing datetime value:', error);
-      initialValue = '';
     }
-  }
-  
-  setParameterInput(initialValue);
-  setCommentInput(task.comment || '');
-  setShowEditModal(true);
-};
+    
+    setParameterInput(initialValue);
+    setCommentInput(task.comment || '');
+    setShowEditModal(true);
+  };
 
-  // Handle editing completed task using the same API endpoint
+  // ✅ UPDATED: Handle editing with proper timezone conversion
   const handleEditSave = async (): Promise<void> => {
     if (!selectedTask) return;
 
     setIsSubmitting(true);
     try {
+      let processedParameterValue = parameterInput;
+
+      // ✅ Convert datetime from IST to UTC before sending to backend
+      if (selectedTask.task.parameterType === 'DATETIME' && parameterInput) {
+        try {
+          // Input is treated as IST local time
+          const istDate = new Date(parameterInput);
+          // Convert to UTC
+          const utcDate = new Date(istDate.getTime() - (5.5 * 60 * 60 * 1000));
+          processedParameterValue = utcDate.toISOString();
+          
+          console.log(`Converting IST input: ${parameterInput} → UTC: ${processedParameterValue}`);
+        } catch (error) {
+          console.error('Error converting datetime to UTC:', error);
+        }
+      }
+
       const payload: { parameterValue: string; comment?: string } = {
-        parameterValue: parameterInput,
+        parameterValue: processedParameterValue,
       };
 
-      // Only include comment if provided
       if (commentInput && commentInput.trim()) {
         payload.comment = commentInput;
       }
 
-      // Use the same API endpoint to update the completed task
       const response = await axios.patch(
         `${backendURL}/api/assignments/${selectedTask.id}/complete`,
         payload,
@@ -130,13 +205,12 @@ const handleInputClick = (task: Assignment): void => {
       );
 
       if (response.status === 200) {
-        // Update local state
         setCompletedTasks(prevTasks =>
           prevTasks.map(task =>
             task.id === selectedTask.id
               ? { 
                   ...task, 
-                  parameterValue: parameterInput,
+                  parameterValue: processedParameterValue,
                   comment: commentInput || null,
                   updatedAt: new Date().toISOString()
                 }
@@ -144,16 +218,12 @@ const handleInputClick = (task: Assignment): void => {
           )
         );
 
-        // Close modal and reset states
         setShowEditModal(false);
         setParameterInput('');
         setCommentInput('');
         setSelectedTask(null);
 
-        // Show success message
         toast.success('Task updated successfully');
-
-        // Refresh data
         await fetchCompletedTasks();
       }
     } catch (error) {
@@ -202,20 +272,28 @@ const handleInputClick = (task: Assignment): void => {
     );
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
-  };
-
+  // ✅ UPDATED: Get due date in IST
   const getDueDate = (task: Assignment) => {
     if (task.task.taskType === 'ADHOC') {
-      return task.task.dueDate ? formatDate(task.task.dueDate) : '-';
+      return task.task.dueDate ? formatDateIST(task.task.dueDate) : '-';
     } else {
-      return task.schedule?.scheduledDate ? formatDate(task.schedule.scheduledDate) : '-';
+      return task.schedule?.scheduledDate ? formatDateIST(task.schedule.scheduledDate) : '-';
     }
+  };
+
+  // ✅ ADDED: Display parameter value properly formatted for different types
+  const formatParameterValue = (task: Assignment): string => {
+    if (!task.parameterValue) return 'No value';
+    
+    if (task.task.parameterType === 'DATETIME') {
+      return formatDateTimeIST(task.parameterValue);
+    }
+    
+    if (task.task.parameterType === 'BOOLEAN') {
+      return task.parameterValue === 'true' ? 'Yes' : 'No';
+    }
+    
+    return task.parameterValue + (task.task.parameterUnit ? ` ${task.task.parameterUnit}` : '');
   };
 
   if (loading) {
@@ -265,12 +343,18 @@ const handleInputClick = (task: Assignment): void => {
                 </div>
                 Completed Tasks
               </h3>
-              <p className="text-sm text-gray-600 mt-1">All finished tasks</p>
+              <p className="text-sm text-gray-600 mt-1">
+                All finished tasks (times shown in IST)
+              </p>
             </div>
           </div>
           <div className="flex items-center space-x-2">
             <div className="bg-white px-3 py-1 rounded-full shadow-sm">
               <span className="text-sm font-medium text-gray-700">{filteredTasks.length} completed</span>
+            </div>
+            {/* ✅ ADDED: IST timezone indicator */}
+            <div className="bg-blue-100 px-3 py-1 rounded-full border border-blue-200">
+              <span className="text-xs font-medium text-blue-700">IST {new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour12: false })}</span>
             </div>
           </div>
         </div>
@@ -341,7 +425,7 @@ const handleInputClick = (task: Assignment): void => {
                   <th className="text-left py-4 px-6 font-semibold text-gray-700 border-b border-gray-200">Category</th>
                   <th className="text-left py-4 px-6 font-semibold text-gray-700 border-b border-gray-200">Sub-category</th>
                   <th className="text-left py-4 px-6 font-semibold text-gray-700 border-b border-gray-200">Input</th>
-                  <th className="text-left py-4 px-6 font-semibold text-gray-700 border-b border-gray-200">Due Date</th>
+                  <th className="text-left py-4 px-6 font-semibold text-gray-700 border-b border-gray-200">Due Date (IST)</th>
                 </tr>
               </thead>
               <tbody className="bg-white">
@@ -385,8 +469,7 @@ const handleInputClick = (task: Assignment): void => {
                               {task.task.parameterLabel}:
                             </div>
                             <div className="font-medium">
-                              {task.parameterValue || 'Edit Input'}
-                              {task.task.parameterUnit && ` ${task.task.parameterUnit}`}
+                              {formatParameterValue(task)}
                             </div>
                             {task.comment && (
                               <div className="text-xs text-gray-500 truncate max-w-[90px]">
@@ -435,7 +518,7 @@ const handleInputClick = (task: Assignment): void => {
         </div>
       </div>
 
-      {/* Task Detail Modal */}
+      {/* ✅ UPDATED: Task Detail Modal with IST formatting */}
       {showTaskDetail && selectedTask && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
@@ -483,8 +566,7 @@ const handleInputClick = (task: Assignment): void => {
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Parameter Value</label>
                 <p className="text-gray-900 bg-gray-50 p-3 rounded-lg">
-                  {selectedTask.parameterValue || 'No value entered'}
-                  {selectedTask.task.parameterUnit && ` ${selectedTask.task.parameterUnit}`}
+                  {formatParameterValue(selectedTask)}
                 </p>
               </div>
               {selectedTask.comment && (
@@ -499,7 +581,7 @@ const handleInputClick = (task: Assignment): void => {
                   <span className="font-medium">Task Completed</span>
                 </div>
                 <p className="text-xs text-green-600 mt-1">
-                  Completed on: {selectedTask.completedAt ? formatDate(selectedTask.completedAt) : 'Unknown'}
+                  Completed on: {selectedTask.completedAt ? formatDateTimeIST(selectedTask.completedAt) : 'Unknown'}
                 </p>
               </div>
             </div>
@@ -507,176 +589,172 @@ const handleInputClick = (task: Assignment): void => {
         </div>
       )}
 
-     
-     {/* Enhanced Edit Modal for Parameter and Comment */}
-{showEditModal && selectedTask && (
-  <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
-      <div className="border-b border-gray-200 p-6">
-        <div className="flex justify-between items-center">
-          <h3 className="text-xl font-bold text-gray-800 flex items-center">
-            <Edit className="w-5 h-5 mr-2 text-green-600" />
-            Edit Completed Task
-          </h3>
-          <button 
-            onClick={() => setShowEditModal(false)} 
-            className="text-gray-400 hover:text-gray-600 transition-colors p-1 hover:bg-gray-100 rounded-lg"
-            disabled={isSubmitting}
-          >
-            ✕
-          </button>
-        </div>
-      </div>
-      
-      <div className="p-6 space-y-6">
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-3">
-            {selectedTask.task.parameterLabel}
-            {selectedTask.task.parameterIsRequired && <span className="text-red-500"> *</span>}
-            {selectedTask.task.parameterUnit && (
-              <span className="text-gray-500"> ({selectedTask.task.parameterUnit})</span>
-            )}
-          </label>
-          
-          {/* Render different input types based on parameterType */}
-          {selectedTask.task.parameterType === 'DROPDOWN' ? (
-            <select
-              value={parameterInput}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setParameterInput(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 text-gray-800"
-              disabled={isSubmitting}
-            >
-              <option value="">Select an option</option>
-              {selectedTask.task.dropdownOptions.map((option: string, index: number) => (
-                <option key={index} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          ) : selectedTask.task.parameterType === 'BOOLEAN' ? (
-            <div className="flex items-center space-x-4">
-              <label className="flex items-center">
-                <input
-                  type="radio"
-                  name="booleanValue"
-                  value="true"
-                  checked={parameterInput === 'true'}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParameterInput(e.target.value)}
-                  className="mr-2 text-green-600 focus:ring-green-500"
+      {/* ✅ UPDATED: Enhanced Edit Modal with IST support */}
+      {showEditModal && selectedTask && (
+        <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+            <div className="border-b border-gray-200 p-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-xl font-bold text-gray-800 flex items-center">
+                  <Edit className="w-5 h-5 mr-2 text-green-600" />
+                  Edit Completed Task
+                </h3>
+                <button 
+                  onClick={() => setShowEditModal(false)} 
+                  className="text-gray-400 hover:text-gray-600 transition-colors p-1 hover:bg-gray-100 rounded-lg"
                   disabled={isSubmitting}
-                />
-                <span className="text-gray-700">Yes</span>
-              </label>
-              <label className="flex items-center">
-                <input
-                  type="radio"
-                  name="booleanValue"
-                  value="false"
-                  checked={parameterInput === 'false'}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParameterInput(e.target.value)}
-                  className="mr-2 text-green-600 focus:ring-green-500"
-                  disabled={isSubmitting}
-                />
-                <span className="text-gray-700">No</span>
-              </label>
+                >
+                  ✕
+                </button>
+              </div>
             </div>
-          ) : selectedTask.task.parameterType === 'DATETIME' ? (
-            <input
-              type="datetime-local"
-              value={parameterInput}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParameterInput(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 text-gray-800"
-              disabled={isSubmitting}
-            />
-          ) : selectedTask.task.parameterType === 'NUMBER' ? (
-            <input
-              type="number"
-              value={parameterInput}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParameterInput(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 text-gray-800"
-              placeholder="Enter a number..."
-              disabled={isSubmitting}
-            />
-          ) : (
-            // Default TEXT input
-            <input
-              type="text"
-              value={parameterInput}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParameterInput(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 text-gray-800"
-              placeholder="Enter text..."
-              disabled={isSubmitting}
-            />
-          )}
-          
-          {/* Show parameter type indicator */}
-          <div className="mt-2 flex items-center space-x-2">
-            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
-              Type: {selectedTask.task.parameterType}
-            </span>
-            {selectedTask.task.parameterType === 'DATETIME' && (
-              <span className="text-xs text-green-600">
-                Local time (will be converted to UTC)
-              </span>
-            )}
+            
+            <div className="p-6 space-y-6">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-3">
+                  {selectedTask.task.parameterLabel}
+                  {selectedTask.task.parameterIsRequired && <span className="text-red-500"> *</span>}
+                  {selectedTask.task.parameterUnit && (
+                    <span className="text-gray-500"> ({selectedTask.task.parameterUnit})</span>
+                  )}
+                </label>
+                
+                {/* Render different input types based on parameterType */}
+                {selectedTask.task.parameterType === 'DROPDOWN' ? (
+                  <select
+                    value={parameterInput}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setParameterInput(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 text-gray-800"
+                    disabled={isSubmitting}
+                  >
+                    <option value="">Select an option</option>
+                    {selectedTask.task.dropdownOptions?.map((option: string, index: number) => (
+                      <option key={index} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                ) : selectedTask.task.parameterType === 'BOOLEAN' ? (
+                  <div className="flex items-center space-x-4">
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="booleanValue"
+                        value="true"
+                        checked={parameterInput === 'true'}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParameterInput(e.target.value)}
+                        className="mr-2 text-green-600 focus:ring-green-500"
+                        disabled={isSubmitting}
+                      />
+                      <span className="text-gray-700">Yes</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="booleanValue"
+                        value="false"
+                        checked={parameterInput === 'false'}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParameterInput(e.target.value)}
+                        className="mr-2 text-green-600 focus:ring-green-500"
+                        disabled={isSubmitting}
+                      />
+                      <span className="text-gray-700">No</span>
+                    </label>
+                  </div>
+                ) : selectedTask.task.parameterType === 'DATETIME' ? (
+                  <div>
+                    <input
+                      type="datetime-local"
+                      value={parameterInput}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParameterInput(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 text-gray-800"
+                      disabled={isSubmitting}
+                    />
+                    <div className="mt-2 text-xs text-blue-600 bg-blue-50 p-2 rounded-md">
+                      💡 Enter time in IST. It will be automatically converted to UTC for storage.
+                    </div>
+                  </div>
+                ) : selectedTask.task.parameterType === 'NUMBER' ? (
+                  <input
+                    type="number"
+                    value={parameterInput}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParameterInput(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 text-gray-800"
+                    placeholder="Enter a number..."
+                    disabled={isSubmitting}
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    value={parameterInput}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setParameterInput(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 text-gray-800"
+                    placeholder="Enter text..."
+                    disabled={isSubmitting}
+                  />
+                )}
+                
+                <div className="mt-2 flex items-center space-x-2">
+                  <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
+                    Type: {selectedTask.task.parameterType}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-3">
+                  Comment <span className="text-gray-400">(Optional)</span>
+                </label>
+                <textarea
+                  value={commentInput}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCommentInput(e.target.value)}
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 resize-none text-gray-800"
+                  placeholder="Edit optional comment..."
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div className="bg-green-50 border border-green-200 p-3 rounded-lg">
+                <div className="flex items-center text-green-700 text-sm">
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  <span className="font-medium">Editing completed task</span>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4">
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="px-5 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-150 font-medium disabled:opacity-50"
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleEditSave}
+                  disabled={
+                    isSubmitting || 
+                    (selectedTask.task.parameterIsRequired && !parameterInput.trim())
+                  }
+                  className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-150 flex items-center font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Updating...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 mr-2" />
+                      Update Task
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-3">
-            Comment <span className="text-gray-400">(Optional)</span>
-          </label>
-          <textarea
-            value={commentInput}
-            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCommentInput(e.target.value)}
-            rows={3}
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 resize-none text-gray-800"
-            placeholder="Edit optional comment..."
-            disabled={isSubmitting}
-          />
-        </div>
-
-        <div className="bg-green-50 border border-green-200 p-3 rounded-lg">
-          <div className="flex items-center text-green-700 text-sm">
-            <CheckCircle2 className="w-4 h-4 mr-2" />
-            <span className="font-medium">Editing completed task</span>
-          </div>
-        </div>
-
-        <div className="flex justify-end space-x-3 pt-4">
-          <button
-            onClick={() => setShowEditModal(false)}
-            className="px-5 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-150 font-medium disabled:opacity-50"
-            disabled={isSubmitting}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleEditSave}
-            disabled={
-              isSubmitting || 
-              (selectedTask.task.parameterIsRequired && !parameterInput.trim())
-            }
-            className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-150 flex items-center font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isSubmitting ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Updating...
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="w-4 h-4 mr-2" />
-                Update Task
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
-
+      )}
     </div>
   );
-};
+}
