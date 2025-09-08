@@ -18,7 +18,7 @@ export interface Task {
    dropdownOptions?: string[];
    repetitionConfig : RepetitionConfig;
   createdBy: string;
-  status?: 'pending' | 'completed'; // Default status if not in API
+  status?: 'pending' | 'completed'; 
 }
 export interface TaskMember {
   id: string;
