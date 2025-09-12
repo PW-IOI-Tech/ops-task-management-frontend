@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, SetStateAction } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   MagnifyingGlassIcon,
   FunnelIcon,
@@ -10,13 +10,60 @@ import {
   CheckCircleIcon,
   PlusIcon,
   EyeIcon,
-  XMarkIcon
+  XMarkIcon,
+  CalendarIcon
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
+
+// Utility functions for timezone conversion - Fixed version
+const formatDateForDisplay = (date: Date): string => {
+  // Format date for display in IST using Intl.DateTimeFormat
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  }).format(date);
+};
+
+const formatDateForInput = (date: Date): string => {
+  // Create a new date adjusted for IST timezone offset for HTML date input
+  const istOffset = 5.5 * 60; // IST is UTC+5:30 in minutes
+  const localOffset = date.getTimezoneOffset(); // Local timezone offset in minutes
+  const istDate = new Date(date.getTime() + (istOffset + localOffset) * 60 * 1000);
+  
+  const year = istDate.getFullYear();
+  const month = String(istDate.getMonth() + 1).padStart(2, '0');
+  const day = String(istDate.getDate()).padStart(2, '0');
+  
+  return `${year}-${month}-${day}`;
+};
+
+
+// Alternative simpler approach - using manual offset calculation
+const getISTDateString = (): string => {
+  const now = new Date();
+  const istOffset = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
+  const istTime = new Date(now.getTime() + istOffset);
+  
+  const year = istTime.getUTCFullYear();
+  const month = String(istTime.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(istTime.getUTCDate()).padStart(2, '0');
+  
+  return `${year}-${month}-${day}`;
+};
 
 export default function Overview() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('All Tasks');
+  
+  // Date range state - Initialize with current IST date using the simpler approach
+  const [startDate, setStartDate] = useState(() => getISTDateString());
+  const [endDate, setEndDate] = useState(() => getISTDateString());
+
   type TaskUpdate = {
     id: string;
     name: string;
@@ -28,170 +75,149 @@ export default function Overview() {
     totalTasks: number;
     assignee: string;
     taskType: string;
+    createdAt?: string;
+    updatedAt?: string;
   };
 
   const [selectedTask, setSelectedTask] = useState<TaskUpdate | null>(null);
   const [showTaskDetail, setShowTaskDetail] = useState(false);
   
-  // State for API data
-  const [dashboardSummary, setDashboardSummary] = useState({
+  // Updated state for new API structure
+  const [dashboardData, setDashboardData] = useState({
     totalAssignedTasks: 0,
     pending: 0,
     completed: 0,
-    adhoc: 0
+    adhoc: 0,
+    categorySummary: [] as Array<{
+      category: string;
+      assignees: Array<{
+        name: string;
+        total: number;
+        completed: number;
+        pending: number;
+        completionRate: number;
+      }>;
+      totalTasks: number;
+      totalCompleted: number;
+      totalPending: number;
+      overallCompletionRate: number;
+    }>
   });
-  type Assignee = {
-    name: string;
-    completionRate: number;
-    completed: number;
-    total: number;
-  };
-
-  type CategorySummaryItem = {
-    category: string;
-    assignees: Assignee[];
-  };
-
-  const [categorySummary, setCategorySummary] = useState<CategorySummaryItem[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
-  // Function to fetch dashboard summary
-  const fetchDashboardSummary = async () => {
+  // Optimized API call function with proper timezone handling
+  const fetchDashboardData = async (istStartDate: string, istEndDate: string) => {
     try {
-      const response = await axios.get(`${backendUrl}/api/dashboard/summary`, {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-      if (response.data.success) {
-        setDashboardSummary(response.data.data);
-      } else {
-        throw new Error(response.data.message || 'Failed to fetch dashboard summary');
-      }
-    } catch (err) {
-      if (err instanceof Error) {
-        setError(err instanceof Error ? err.message : String(err));
-      } else {
-        setError('An unknown error occurred');
-      }
-      console.error('Error fetching dashboard summary:', err);
-    }
-  };
-
-  // Function to fetch category summary
-  const fetchCategorySummary = async () => {
-    try {
-      const response = await axios.get(`${backendUrl}/api/dashboard/category-summary`, {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.data.success) {
-        setCategorySummary(response.data.data);
-      } else {
-        throw new Error(response.data.message || 'Failed to fetch category summary');
-      }
-    } catch (err) {
-      if (err instanceof Error) {
-        setError(err instanceof Error ? err.message : String(err));
-      } else {
-        setError('An unknown error occurred');
-      }
-      console.error('Error fetching category summary:', err);
-    }
-  };
-
-  // Fetch data on component mount
-  useEffect(() => {
-    const fetchData = async () => {
       setLoading(true);
-      try {
-        await Promise.all([
-          fetchDashboardSummary(),
-          fetchCategorySummary()
-        ]);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        setLoading(false);
+      setError(null);
+      
+      
+      const response = await axios.get(`${backendUrl}/api/dashboard/category-summary`, {
+        params: {
+          startDate: istStartDate,
+          endDate: istEndDate
+        },
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.data.success) {
+        setDashboardData(response.data.data);
+        setLastUpdated(new Date());
+      } else {
+        throw new Error(response.data.message || 'Failed to fetch dashboard data');
       }
-    };
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+      setError(errorMessage);
+      console.error('Error fetching dashboard data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    fetchData();
-  }, []);
+  // Optimized useEffect with proper dependencies
+  useEffect(() => {
+    fetchDashboardData(startDate, endDate);
+  }, [startDate, endDate, backendUrl]);
 
-  // Transform API data to match your component's expected format
-  const statsData = [
+  // Memoized stats data to prevent unnecessary re-renders
+  const statsData = useMemo(() => [
     {
       title: 'Total assigned tasks',
-      value: dashboardSummary.totalAssignedTasks.toString(),
+      value: dashboardData.totalAssignedTasks.toString(),
       icon: Squares2X2Icon,
       bgColor: 'bg-blue-50',
       iconColor: 'text-blue-600',
     },
     {
       title: 'Total pending tasks',
-      value: dashboardSummary.pending.toString(),
+      value: dashboardData.pending.toString(),
       icon: ClockIcon,
       bgColor: 'bg-yellow-50',
       iconColor: 'text-yellow-600',
     },
     {
       title: 'Completed Tasks',
-      value: dashboardSummary.completed.toString(),
+      value: dashboardData.completed.toString(),
       icon: CheckCircleIcon,
       bgColor: 'bg-green-50',
       iconColor: 'text-green-600',
     },
     {
       title: 'Total Ad-hoc task created',
-      value: dashboardSummary.adhoc.toString(),
+      value: dashboardData.adhoc.toString(),
       icon: PlusIcon,
       bgColor: 'bg-purple-50',
       iconColor: 'text-purple-600',
     },
-  ];
+  ], [dashboardData]);
 
-  // Transform category summary data to task updates format
-  const taskUpdates = categorySummary.flatMap((category, categoryIndex) => 
-    category.assignees.map((assignee, assigneeIndex) => ({
-      id: `${categoryIndex}-${assigneeIndex}`,
-      name: category.category,
-      description: `Category: ${category.category}`,
-      category: category.category,
-      subCategory: null,
-      completionRate: assignee.completionRate,
-      completedTasks: assignee.completed,
-      totalTasks: assignee.total,
-      assignee: assignee.name,
-      taskType: 'normal'
-    }))
-  );
+  // Memoized task updates transformation
+  const taskUpdates = useMemo(() => {
+    return dashboardData.categorySummary.flatMap((category, categoryIndex) => 
+      category.assignees.map((assignee, assigneeIndex) => ({
+        id: `${categoryIndex}-${assigneeIndex}`,
+        name: category.category,
+        description: `Category: ${category.category}`,
+        category: category.category,
+        subCategory: null,
+        completionRate: assignee.completionRate,
+        completedTasks: assignee.completed,
+        totalTasks: assignee.total,
+        assignee: assignee.name,
+        taskType: 'normal'
+      }))
+    );
+  }, [dashboardData.categorySummary]);
 
-  // Filter tasks based on search and filter
-  const filteredTasks = taskUpdates.filter(task => {
-    const matchesSearch = task.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         task.assignee.toLowerCase().includes(searchTerm.toLowerCase());
+  // Memoized filtered tasks
+  const filteredTasks = useMemo(() => {
+    return taskUpdates.filter(task => {
+      const matchesSearch = task.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           task.assignee.toLowerCase().includes(searchTerm.toLowerCase());
 
-    let matchesFilter = false;
-    if (selectedFilter === 'All Tasks') {
-      matchesFilter = true;
-    } else if (selectedFilter === 'Normal') {
-      matchesFilter = task.taskType === 'normal';
-    } else if (selectedFilter === 'Ad-hoc') {
-      matchesFilter = task.taskType === 'ad-hoc';
-    } else if (selectedFilter === 'Completed') {
-      matchesFilter = task.completionRate === 100;
-    }
+      let matchesFilter = false;
+      if (selectedFilter === 'All Tasks') {
+        matchesFilter = true;
+      } else if (selectedFilter === 'Normal') {
+        matchesFilter = task.taskType === 'normal';
+      } else if (selectedFilter === 'Ad-hoc') {
+        matchesFilter = task.taskType === 'ad-hoc';
+      } else if (selectedFilter === 'Completed') {
+        matchesFilter = task.completionRate === 100;
+      }
 
-    return matchesSearch && matchesFilter;
-  });
+      return matchesSearch && matchesFilter;
+    });
+  }, [taskUpdates, searchTerm, selectedFilter]);
 
   const clearSearch = () => {
     setSearchTerm('');
@@ -200,6 +226,46 @@ export default function Overview() {
   const handleCategoryClick = (task: TaskUpdate) => {
     setSelectedTask(task);
     setShowTaskDetail(true);
+  };
+
+  // Quick date range handlers with proper IST handling - simplified
+  const setDateRange = (days: number) => {
+    const now = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000; // IST offset
+    const istNow = new Date(now.getTime() + istOffset);
+    
+    // Calculate start date
+    const startDateObj = new Date(istNow);
+    startDateObj.setUTCDate(istNow.getUTCDate() - days + 1);
+    
+    const formatDate = (date: Date) => {
+      const year = date.getUTCFullYear();
+      const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(date.getUTCDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    
+    setStartDate(formatDate(startDateObj));
+    setEndDate(formatDate(istNow));
+  };
+
+  const setCurrentMonth = () => {
+    const now = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const istNow = new Date(now.getTime() + istOffset);
+    
+    const firstDay = new Date(istNow);
+    firstDay.setUTCDate(1); // First day of current month
+    
+    const formatDate = (date: Date) => {
+      const year = date.getUTCFullYear();
+      const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(date.getUTCDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    
+    setStartDate(formatDate(firstDay));
+    setEndDate(formatDate(istNow));
   };
 
   const getTaskTypeBadge = (taskType: string) => {
@@ -299,16 +365,86 @@ export default function Overview() {
 
   return (
     <div className="space-y-6">
-      {/* Rest of your existing JSX remains the same, but use filteredTasks instead of taskUpdates */}
       {/* Enhanced Header with gradient background */}
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl shadow-lg border border-gray-100 p-6">
-        <div className="flex items-center space-x-3">
-          <div className="bg-blue-100 p-3 rounded-lg">
-            <Squares2X2Icon className="w-6 h-6 text-blue-600" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="bg-blue-100 p-3 rounded-lg">
+              <Squares2X2Icon className="w-6 h-6 text-blue-600" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
+              <p className="text-sm text-gray-600 mt-1">
+                Overview of all tasks
+                {lastUpdated && (
+                  <span className="ml-2 text-xs text-blue-600">
+                    • Last updated: {formatDateForDisplay(lastUpdated)}
+                  </span>
+                )}
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
-            <p className="text-sm text-gray-600 mt-1">Overview of all tasks</p>
+          
+          {/* Date Range Filter with IST indication */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <CalendarIcon className="w-5 h-5 text-gray-500" />
+                <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded">
+                  IST
+                </span>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="flex flex-col">
+                  <label className="text-xs font-medium text-gray-600 mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="text-sm border text-black border-gray-300 rounded-md px-3 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex flex-col">
+                  <label className="text-xs font-medium text-gray-600 mb-1">End Date</label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="text-sm border text-black border-gray-300 rounded-md px-3 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              
+              {/* Quick date range buttons */}
+              <div className="flex flex-col space-y-1">
+                <button
+                  onClick={() => setDateRange(1)}
+                  className="text-xs bg-gray-100 text-black hover:bg-gray-200 px-2 py-1 rounded transition-colors"
+                >
+                  Today
+                </button>
+                <button
+                  onClick={() => setDateRange(7)}
+                  className="text-xs bg-gray-100 text-black hover:bg-gray-200 px-2 py-1 rounded transition-colors"
+                >
+                  7 Days
+                </button>
+              </div>
+              <div className="flex flex-col space-y-1">
+                <button
+                  onClick={() => setDateRange(30)}
+                  className="text-xs bg-gray-100 text-black hover:bg-gray-200 px-2 py-1 rounded transition-colors"
+                >
+                  30 Days
+                </button>
+                <button
+                  onClick={setCurrentMonth}
+                  className="text-xs bg-gray-100 text-black hover:bg-gray-200 px-2 py-1 rounded transition-colors"
+                >
+                  This Month
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -362,7 +498,7 @@ export default function Overview() {
               <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 w-4 h-4" />
               <input
                 type="text"
-                placeholder="Search tasks, categories, or remarks..."
+                placeholder="Search tasks, categories, or assignees..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white text-gray-800 placeholder-gray-500"
@@ -473,7 +609,7 @@ export default function Overview() {
 
       {/* Enhanced Task Detail Modal */}
       {showTaskDetail && selectedTask && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-gray-200 p-6 rounded-t-xl">
               <div className="flex justify-between items-center">
