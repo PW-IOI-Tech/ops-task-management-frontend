@@ -17,8 +17,12 @@ const LoginComponent: React.FC<LoginProps> = ({ onGoogleSignIn }) => {
     if (isAuthenticated) {
       if (user?.role === 'ADMIN') {
         router.push('/admin');
-      } else {
+      } 
+      else if (user?.role === 'MEMBER') {
         router.push('/operation');
+      }
+      else {
+        router.push('/auth/login');
       }
     }
   }, [isAuthenticated, user, router]);

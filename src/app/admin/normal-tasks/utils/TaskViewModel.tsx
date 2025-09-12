@@ -19,7 +19,6 @@ import axios from 'axios';
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 interface TaskMember {
-  id: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -27,6 +26,10 @@ interface TaskMember {
 
 interface Schedule {
   scheduledDate: string;
+}
+interface AssignedByUser {
+  firstName: string;
+  lastName: string;
 }
 
 interface TaskAssignment {
@@ -41,9 +44,10 @@ interface TaskAssignment {
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
-  assignedToUser: TaskMember;
+  assignedToUser: TaskMember; // ✅ Now matches the actual response structure
   schedule: Schedule;
 }
+
 
 interface Category {
   id: string;
@@ -190,10 +194,21 @@ export default function TaskViewModal({ taskId, onClose }: TaskViewModalProps) {
   };
 
   // ✅ Get all assigned members with their details
-  const getAssignedMembers = (taskAssignments: TaskAssignment[]): TaskMember[] => {
-    return taskAssignments.map(assignment => assignment.assignedToUser);
-  };
-
+ const getAssignedMembers = (taskAssignments: TaskAssignment[]): TaskMember[] => {
+  const uniqueMembers = new Map<string, TaskMember>();
+  
+  taskAssignments.forEach(assignment => {
+    const user = assignment.assignedToUser;
+    // ✅ Use email as unique key since id is not available
+    if (user && user.email && !uniqueMembers.has(user.email)) {
+      uniqueMembers.set(user.email, user);
+    }
+  });
+  
+  return Array.from(uniqueMembers.values());
+};
+  
+ 
   // ✅ Format parameter value for display
   const formatParameterValue = (value: string | null, unit?: string | null): string => {
     if (!value) return '-';
@@ -377,8 +392,8 @@ export default function TaskViewModal({ taskId, onClose }: TaskViewModalProps) {
                 </div>
               )}
 
-              {/* Assigned Members */}
-            <div className="space-y-2">
+{/* Assigned Members */}
+<div className="space-y-2">
   <h3 className="text-sm font-medium text-gray-700 flex items-center">
     <UserIcon className="w-4 h-4 mr-1" />
     Assigned Members ({assignedMembers.length})
@@ -387,7 +402,8 @@ export default function TaskViewModal({ taskId, onClose }: TaskViewModalProps) {
     {assignedMembers.length > 0 ? (
       <div className="space-y-2">
         {assignedMembers.map((member) => (
-          <div key={member.id} className="flex items-center space-x-3 bg-white rounded-lg p-3 border border-gray-200">
+          <div key={member.email} className="flex items-center space-x-3 bg-white rounded-lg p-3 border border-gray-200">
+            {/* ✅ Changed key from member.id to member.email */}
             <div className="bg-blue-100 w-8 h-8 rounded-full flex items-center justify-center">
               <span className="text-blue-600 font-medium text-sm">
                 {(member.firstName || '').charAt(0)}{(member.lastName || '').charAt(0)}
@@ -407,6 +423,7 @@ export default function TaskViewModal({ taskId, onClose }: TaskViewModalProps) {
     )}
   </div>
 </div>
+
 
               {/* Created By */}
               <div className="space-y-2">
@@ -430,12 +447,15 @@ export default function TaskViewModal({ taskId, onClose }: TaskViewModalProps) {
               </div>
 
               {/* ✅ Task History Table */}
-              <div className="bg-gray-50 rounded-lg overflow-hidden border border-gray-200">
+ 
+<div className="bg-gray-50 rounded-lg overflow-hidden border border-gray-200">
   <div className="overflow-x-auto">
     <table className="min-w-full divide-y divide-gray-200">
       <thead className="bg-gray-100">
         <tr>
-          {/* ✅ REMOVED: Assigned To column */}
+          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Assigned To
+          </th>
           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
             Scheduled Date (IST)
           </th>
@@ -457,7 +477,22 @@ export default function TaskViewModal({ taskId, onClose }: TaskViewModalProps) {
         {task.taskAssignments.length > 0 ? (
           task.taskAssignments.map((assignment) => (
             <tr key={assignment.id} className="hover:bg-gray-50">
-              {/* ✅ REMOVED: Assigned To cell */}
+              <td className="px-6 py-4 whitespace-nowrap text-sm">
+                <div className="flex items-center space-x-3">
+                  <div className="bg-blue-100 w-8 h-8 rounded-full flex items-center justify-center">
+                    <span className="text-blue-600 font-medium text-xs">
+                      {(assignment.assignedToUser.firstName || '').charAt(0)}
+                      {(assignment.assignedToUser.lastName || '').charAt(0)}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {assignment.assignedToUser.firstName} {assignment.assignedToUser.lastName}
+                    </p>
+                    <p className="text-xs text-gray-500">{assignment.assignedToUser.email}</p>
+                  </div>
+                </div>
+              </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 {assignment.schedule?.scheduledDate 
                   ? formatDateTimeIST(assignment.schedule.scheduledDate)
@@ -490,8 +525,7 @@ export default function TaskViewModal({ taskId, onClose }: TaskViewModalProps) {
           ))
         ) : (
           <tr>
-            <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-              {/* ✅ UPDATED: colSpan reduced from 6 to 5 */}
+            <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
               <div className="flex flex-col items-center">
                 <ClipboardDocumentListIcon className="w-12 h-12 text-gray-300 mb-3" />
                 <p className="text-lg font-medium">No history records found</p>
@@ -504,6 +538,7 @@ export default function TaskViewModal({ taskId, onClose }: TaskViewModalProps) {
     </table>
   </div>
 </div>
+
 
               {/* ✅ History Summary */}
               {task.taskAssignments.length > 0 && (

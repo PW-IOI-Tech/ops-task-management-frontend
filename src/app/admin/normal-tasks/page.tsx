@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { 
   MagnifyingGlassIcon,
   PlusIcon,
@@ -18,7 +18,9 @@ import axios from 'axios';
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 import { useRouter } from 'next/navigation';
 import { Category } from './utils/types';
-import {toast} from 'react-toastify'
+import {toast} from 'react-toastify';
+import { useAuth } from '@/app/contexts/AuthContext';
+import { User } from 'lucide-react';
 
 // Updated Category interface to match API response
 interface ApiCategory {
@@ -49,36 +51,108 @@ export default function NormalTasks() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const router = useRouter();
+  // ✅ Caching state
+  const [lastFetch, setLastFetch] = useState<number>(0);
+  const [isFetching, setIsFetching] = useState<boolean>(false);
+  const fetchPromiseRef = useRef<Promise<void> | null>(null);
 
-  // Fetch categories from API
+  // ✅ Cache duration: 5 minutes
+  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+  const MIN_FETCH_INTERVAL = 10 * 1000; // Minimum 10 seconds between fetches
+
+  const router = useRouter();
+  const { user } = useAuth();
+  
   useEffect(() => {
-    const fetchCategories = async () => {
+    if(!user){
+      router.push('/auth/login');
+    }
+  }, [user, router]);
+
+  // ✅ Check if cache is valid
+  const isCacheValid = useCallback(() => {
+    const now = Date.now();
+    return (now - lastFetch) < CACHE_DURATION;
+  }, [lastFetch]);
+
+  // ✅ Optimized fetch categories with caching
+  const fetchCategories = useCallback(async (force: boolean = false) => {
+    const now = Date.now();
+    
+    // Skip if not forced and cache is still valid
+    if (!force && isCacheValid()) {
+      console.log('Using cached categories data');
+      return;
+    }
+
+    // Skip if too frequent (prevent spam)
+    if (!force && (now - lastFetch) < MIN_FETCH_INTERVAL) {
+      console.log('Category fetch too frequent, skipping');
+      return;
+    }
+
+    // If a fetch is already in progress, wait for it
+    if (isFetching && fetchPromiseRef.current) {
+      console.log('Category fetch already in progress, waiting...');
       try {
-        setLoading(true);
+        await fetchPromiseRef.current;
+      } catch (error) {
+        console.error('Error waiting for category fetch:', error);
+      }
+      return;
+    }
+
+    setIsFetching(true);
+    setLoading(true);
+
+    const fetchPromise = (async () => {
+      try {
+        console.log('Fetching fresh categories data');
+        
         const response = await axios.get(`${backendUrl}/api/categories`, {
           withCredentials: true
         });
+        
         console.log('Fetched categories:', response.data);
         
         // Extract categories from the nested response structure
         const categoriesData = Array.isArray(response.data?.data) 
           ? response.data.data
           : [];
+        
         setCategories(categoriesData);
+        setLastFetch(Date.now());
         setError(null);
+        
       } catch (err) {
         console.error('Error fetching categories:', err);
         setError('Failed to load categories');
       } finally {
         setLoading(false);
+        setIsFetching(false);
+        fetchPromiseRef.current = null;
       }
-    };
+    })();
 
-    fetchCategories();
+    fetchPromiseRef.current = fetchPromise;
+    await fetchPromise;
+  }, [lastFetch, isCacheValid]);
+
+  // ✅ Force refresh function
+  const refreshCategories = useCallback(() => {
+    setLastFetch(0); // Reset cache
+    fetchCategories(true);
+  }, [fetchCategories]);
+
+
+  
+
+  // ✅ Initial fetch on component mount
+  useEffect(() => {
+    fetchCategories(true); // Force initial fetch
   }, []);
 
-  // Create category via API
+  // ✅ Optimized create category with local state update
   const handleCreateCategory = async (newCategory: { name: string; description?: string }) => {
     try {
       const response = await axios.post(`${backendUrl}/api/categories`, {
@@ -93,11 +167,23 @@ export default function NormalTasks() {
 
       toast.success('Category created successfully');
       
-      // Refresh categories after creation
-      const categoriesResponse = await axios.get(`${backendUrl}/api/categories`, {
-        withCredentials: true
-      });
-      setCategories(categoriesResponse.data?.data || []);
+      // ✅ Update local state immediately instead of API call
+      if (response.data?.data) {
+        const newApiCategory: ApiCategory = {
+          id: response.data.data.id,
+          name: response.data.data.name,
+          description: response.data.data.description,
+          subcategoryCount: 0,
+          totalAssignmentsToday: 0,
+          completedAssignmentsToday: 0,
+          pendingAssignmentsToday: 0,
+          createdByUser: response.data.data.createdByUser
+        };
+        
+        setCategories(prev => [...prev, newApiCategory]);
+        setLastFetch(Date.now()); // Update cache timestamp
+      }
+      
       setShowCreateCategoryModal(false);
       setError(null);
       
@@ -148,6 +234,7 @@ export default function NormalTasks() {
     setShowDeleteModal(true);
   };
 
+  // ✅ Optimized delete with local state update
   const confirmDeleteCategory = async () => {
     if (!categoryToDelete) return;
     
@@ -157,11 +244,11 @@ export default function NormalTasks() {
       });
 
       toast.success('Category deleted successfully');
-      // Refresh categories after deletion
-      const categoriesResponse = await axios.get(`${backendUrl}/api/categories`, {
-        withCredentials: true
-      });
-      setCategories(categoriesResponse.data?.data || []);
+      
+      // ✅ Update local state immediately instead of API call
+      setCategories(prev => prev.filter(cat => cat.id !== categoryToDelete.id));
+      setLastFetch(Date.now()); // Update cache timestamp
+      
       setShowDeleteModal(false);
       setCategoryToDelete(null);
       setError(null);
@@ -173,6 +260,7 @@ export default function NormalTasks() {
     }
   };
 
+  // ✅ Optimized update with local state update
   const handleUpdateCategory = async (updatedCategory: Category) => {
     try {
       const response = await axios.patch(`${backendUrl}/api/categories/${updatedCategory.id}`, {
@@ -187,11 +275,18 @@ export default function NormalTasks() {
 
       toast.success('Category updated successfully');
       
-      // Refresh categories after update
-      const categoriesResponse = await axios.get(`${backendUrl}/api/categories`, {
-        withCredentials: true
-      });
-      setCategories(categoriesResponse.data?.data || []);
+      // ✅ Update local state immediately instead of API call
+      setCategories(prev => prev.map(cat => 
+        cat.id === updatedCategory.id 
+          ? {
+              ...cat,
+              name: updatedCategory.name,
+              description: updatedCategory.description || ''
+            }
+          : cat
+      ));
+      setLastFetch(Date.now()); // Update cache timestamp
+      
       setShowEditCategoryModal(false);
       setCategoryToEdit(null);
       setError(null);
@@ -203,22 +298,58 @@ export default function NormalTasks() {
     }
   };
 
-  const filteredCategories = Array.isArray(categories) 
-    ? categories.filter(category => 
-        category.name.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    : [];
+  // ✅ Optimized filtering
+  const filteredCategories = categories.filter(category => 
+    category.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  const totalCategories = Array.isArray(categories) ? categories.length : 0;
+  const totalCategories = categories.length;
   
   // Calculate today's totals from all categories
-  const totalTodayTasks = Array.isArray(categories) 
-    ? categories.reduce((sum, category) => sum + category.totalAssignmentsToday, 0) 
-    : 0;
-  
-  const completedTodayTasks = Array.isArray(categories) 
-    ? categories.reduce((sum, category) => sum + category.completedAssignmentsToday, 0) 
-    : 0;
+  const totalTodayTasks = categories.reduce((sum, category) => sum + category.totalAssignmentsToday, 0);
+  const completedTodayTasks = categories.reduce((sum, category) => sum + category.completedAssignmentsToday, 0);
+
+  // ✅ Auto-refresh every 5 minutes when component is active
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!document.hidden && !isCacheValid()) {
+        console.log('Auto-refreshing categories');
+        fetchCategories();
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+
+    return () => clearInterval(interval);
+  }, [fetchCategories, isCacheValid]);
+
+  // ✅ Refresh on window focus if cache is stale
+  useEffect(() => {
+    let focusTimeout: NodeJS.Timeout;
+
+    const handleFocus = () => {
+      clearTimeout(focusTimeout);
+      focusTimeout = setTimeout(() => {
+        if (!isCacheValid()) {
+          console.log('Window focused and cache stale, refreshing categories');
+          fetchCategories();
+        }
+      }, 1000); // 1 second debounce
+    };
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        handleFocus();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearTimeout(focusTimeout);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchCategories, isCacheValid]);
 
   if (showCategoryDetail && selectedCategory) {
     return (
@@ -229,25 +360,17 @@ export default function NormalTasks() {
           setSelectedCategory(null);
         }}
         onUpdateCategory={(updatedCategory: Category) => {
-          // Refresh categories when updated
-          const fetchCategories = async () => {
-            try {
-              const response = await axios.get(`${backendUrl}/api/categories`, {
-                withCredentials: true
-              });
-              setCategories(response.data?.data || []);
-            } catch (err) {
-              console.error('Error refreshing categories:', err);
-            }
-          };
-          fetchCategories();
+          // ✅ Only refresh if cache is stale, otherwise use existing data
+          if (!isCacheValid()) {
+            fetchCategories();
+          }
           setSelectedCategory(updatedCategory);
         }}
       />
     );
   }
 
-  if (loading) {
+  if (loading && categories.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -278,15 +401,30 @@ export default function NormalTasks() {
             <div>
               <h1 className="text-2xl font-bold text-gray-800">Normal Tasks</h1>
               <p className="text-sm text-gray-600 mt-1">Manage structured tasks by categories</p>
+              {/* ✅ Show cache status for debugging */}
+              {lastFetch > 0 && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Last updated: {new Date(lastFetch).toLocaleTimeString()}
+                </p>
+              )}
             </div>
           </div>
-          <button
-            onClick={() => setShowCreateCategoryModal(true)}
-            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors duration-150 hover:shadow-md"
-          >
-            <PlusIcon className="w-4 h-4 mr-2" />
-            Create Category
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={refreshCategories}
+              className="inline-flex items-center px-3 py-2 bg-gray-600 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors duration-150"
+              disabled={isFetching}
+            >
+              {isFetching ? 'Refreshing...' : 'Refresh'}
+            </button>
+            <button
+              onClick={() => setShowCreateCategoryModal(true)}
+              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors duration-150 hover:shadow-md"
+            >
+              <PlusIcon className="w-4 h-4 mr-2" />
+              Create Category
+            </button>
+          </div>
         </div>
       </div>
 
