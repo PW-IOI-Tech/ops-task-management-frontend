@@ -152,28 +152,28 @@ export default function Overview() {
   const statsData = useMemo(() => [
     {
       title: 'Total assigned tasks',
-      value: dashboardData.totalAssignedTasks.toString() || "",
+      value: dashboardData.totalAssignedTasks ? dashboardData.totalAssignedTasks.toString() : '0',
       icon: Squares2X2Icon,
       bgColor: 'bg-blue-50',
       iconColor: 'text-blue-600',
     },
     {
       title: 'Total pending tasks',
-      value: dashboardData.pending.toString(),
+      value: dashboardData.pending ? dashboardData.pending.toString() : '0',
       icon: ClockIcon,
       bgColor: 'bg-yellow-50',
       iconColor: 'text-yellow-600',
     },
     {
       title: 'Completed Tasks',
-      value: dashboardData.completed.toString(),
+      value: dashboardData.completed ? dashboardData.completed.toString() : '0',
       icon: CheckCircleIcon,
       bgColor: 'bg-green-50',
       iconColor: 'text-green-600',
     },
     {
       title: 'Total Ad-hoc task created',
-      value: dashboardData.adhoc.toString(),
+      value: dashboardData.adhoc ? dashboardData.adhoc.toString() : '0',
       icon: PlusIcon,
       bgColor: 'bg-purple-50',
       iconColor: 'text-purple-600',
