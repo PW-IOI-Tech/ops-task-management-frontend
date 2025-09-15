@@ -20,8 +20,6 @@ import { useRouter } from 'next/navigation';
 import { Category } from './utils/types';
 import {toast} from 'react-toastify';
 import { useAuth } from '@/app/contexts/AuthContext';
-import { User } from 'lucide-react';
-
 // Updated Category interface to match API response
 interface ApiCategory {
   id: string;
