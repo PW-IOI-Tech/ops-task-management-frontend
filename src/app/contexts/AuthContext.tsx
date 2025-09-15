@@ -116,14 +116,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   // ✅ Force refresh auth (for manual refresh)
+
+  const noAuthCheckPaths = ['/auth/login'];
   const refreshAuth = () => {
+    
     setLastCheck(0); // Reset cache
     checkAuthStatus(true);
   };
 
   // ✅ Initial auth check on mount
   useEffect(() => {
-    checkAuthStatus(true); // Force initial check
+    if(!noAuthCheckPaths.includes(window.location.pathname)) {
+      checkAuthStatus(true);
+    }
   }, []);
 
   // ✅ Optimized focus handler with debouncing

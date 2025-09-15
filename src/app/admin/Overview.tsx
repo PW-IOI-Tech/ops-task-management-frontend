@@ -152,7 +152,7 @@ export default function Overview() {
   const statsData = useMemo(() => [
     {
       title: 'Total assigned tasks',
-      value: dashboardData.totalAssignedTasks.toString(),
+      value: dashboardData.totalAssignedTasks.toString() || "",
       icon: Squares2X2Icon,
       bgColor: 'bg-blue-50',
       iconColor: 'text-blue-600',
