@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { 
   ArrowLeftIcon,
   PlusIcon,
@@ -13,7 +13,9 @@ import {
   PencilIcon,
   TrashIcon,
   MagnifyingGlassIcon,
-  UserPlusIcon
+  UserPlusIcon,
+  ChevronDownIcon,
+  ChevronRightIcon
 } from '@heroicons/react/24/outline';
 import CreateTaskModal from './CreateTaskModel';
 import CreateSubcategoryModal from './CreateSubCategoryModel';
@@ -23,19 +25,14 @@ import DeleteConfirmModal from './DeleteConfirmModel';
 import axios from 'axios';
 import AssignMemberModal from './AssignMemberModel';
 import TaskViewModal from './TaskViewModel';
-import { ParameterType, Task,Subcategory, Category } from './types';
-import {toast} from 'react-toastify';
+import { ParameterType, Task, Subcategory, Category } from './types';
+import { toast } from 'react-toastify';
 import { convertUTCToIST } from './EditTaskModel';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
-// ✅ Updated Task interface to match API response
-
-
-
-
 interface CategoryDetailViewProps {
-  category: Category ;
+  category: Category;
   onBack: () => void;
   onUpdateCategory: (category: Category) => void;
 }
@@ -54,10 +51,41 @@ export default function CategoryDetailView({ category, onBack, onUpdateCategory 
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [showAssignModal, setShowAssignModal] = useState<boolean>(false);
-const [taskToAssign, setTaskToAssign] = useState<Task | null>(null);
-const [showTaskViewModal, setShowTaskViewModal] = useState<boolean>(false);
-const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [taskToAssign, setTaskToAssign] = useState<Task | null>(null);
+  const [showTaskViewModal, setShowTaskViewModal] = useState<boolean>(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  
+  // ✅ NEW: State for collapsed subcategories and data caching
+  const [collapsedSubcategories, setCollapsedSubcategories] = useState<Set<string>>(new Set());
+  const [dataCache, setDataCache] = useState<{
+    subcategories: Subcategory[];
+    tasks: Task[];
+    timestamp: number;
+  } | null>(null);
+  const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
+  
+  // ✅ Cache duration: 5 minutes
+  const CACHE_DURATION = 5 * 60 * 1000;
 
+  // ✅ Toggle subcategory collapse/expand
+  const toggleSubcategory = (subcategoryId: string) => {
+    setCollapsedSubcategories(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(subcategoryId)) {
+        newSet.delete(subcategoryId);
+      } else {
+        newSet.add(subcategoryId);
+      }
+      return newSet;
+    });
+  };
+
+  // ✅ Check if cache is valid
+  const isCacheValid = () => {
+    if (!dataCache) return false;
+    const now = Date.now();
+    return (now - dataCache.timestamp) < CACHE_DURATION;
+  };
 
   // ✅ Helper function to organize tasks from API response
   const organizeTasks = (tasks: Task[], category: Category): Category => {
@@ -88,12 +116,10 @@ const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
           isAssigned: apiTask.isAssigned,
           assignedTo: apiTask.assignedTo || [],
           createdBy: apiTask.createdBy,
-          status: 'pending' 
-          ,
-
+          status: 'pending',
           taskId: apiTask.taskId,
           parameterType: apiTask.parameterType as ParameterType,
-          repetitionConfig:  apiTask.repetitionConfig || {
+          repetitionConfig: apiTask.repetitionConfig || {
             type: 'none',
             days: undefined,
             onDays: undefined,
@@ -119,59 +145,41 @@ const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
           organizedCategory.directTasks.push(task);
         }
       }
-      // else: task belongs to other category, ignore
     });
 
     return organizedCategory;
   };
 
   const handleAssignMember = (task: Task, e: React.MouseEvent<HTMLButtonElement>) => {
-  e.stopPropagation();
-  setTaskToAssign(task);
-  setShowAssignModal(true);
-};
+    e.stopPropagation();
+    setTaskToAssign(task);
+    setShowAssignModal(true);
+  };
 
+  const handleAssignMembers = async (memberIds: string[]) => {
+    toast.success('Members assigned successfully');
+    await refetchData();
+  };
 
-
-const handleAssignMembers = async(memberIds: string[]) => {
-  // Handle successful assignment - you can show a success message
-  toast.success('Members assigned successfully');
-  await refetchData();
-  
-};
-
-const handleTaskClick = (taskId: string) => {
-  setSelectedTaskId(taskId);
-  setShowTaskViewModal(true);
-};
-
-// const getAssignedMemberText = (task: Task): string => {
-//   if (task.assignedTo && task.assignedTo.length > 0) {
-//     if (task.assignedTo.length === 1) {
-//       const member = task.assignedTo[0];
-//       return `${member.firstName} ${member.lastName}`;
-//     } else {
-//       return `${task.assignedTo.length} members assigned`;
-//     }
-//   }
-//   return task.createdBy || 'Unassigned';
-// };
-
+  const handleTaskClick = (taskId: string) => {
+    setSelectedTaskId(taskId);
+    setShowTaskViewModal(true);
+  };
 
   const deleteTask = async (taskId: string) => {
-  try {
-    await axios.delete(`${backendUrl}/api/tasks/${taskId}`, {
-      withCredentials: true,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
-    toast.success('Task deleted successfully');
-  } catch (error) {
-    console.error('Error deleting task:', error);
-    throw error;
-  }
-};
+    try {
+      await axios.delete(`${backendUrl}/api/tasks/${taskId}`, {
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      toast.success('Task deleted successfully');
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      throw error;
+    }
+  };
 
   const createSubcategory = async (subcategoryData: { name: string; description?: string }) => {
     try {
@@ -187,7 +195,6 @@ const handleTaskClick = (taskId: string) => {
       });
       
       toast.success('Subcategory created successfully');
-      
       return response.data;
     } catch (error) {
       console.error('Error creating subcategory:', error);
@@ -210,11 +217,33 @@ const handleTaskClick = (taskId: string) => {
     }
   };
 
-  // ✅ Updated useEffect to fetch and organize tasks
+  // ✅ Updated useEffect with caching logic
   useEffect(() => {
     const fetchData = async () => {
+      // ✅ Use cache if valid and not initial load
+      if (!isInitialLoad && isCacheValid()) {
+        console.log('Using cached data');
+        const cachedData = dataCache!;
+        
+        const subcategoriesWithEmptyTasks = cachedData.subcategories.map((subcategory: Subcategory) => ({
+          ...subcategory,
+          tasks: []
+        }));
+
+        const categoryWithSubcategories: Category = {
+          ...category,
+          subcategories: subcategoriesWithEmptyTasks,
+          directTasks: []
+        };
+
+        const organizedCategory = organizeTasks(cachedData.tasks, categoryWithSubcategories);
+        onUpdateCategory(organizedCategory);
+        return;
+      }
+
       setLoading(true);
       try {
+        console.log('Fetching fresh data from API');
         // ✅ Fetch both subcategories and tasks
         const [subcategoriesResponse, tasksResponse] = await Promise.all([
           axios.get(`${backendUrl}/api/subcategories?categoryId=${category.id}`, {
@@ -240,19 +269,7 @@ const handleTaskClick = (taskId: string) => {
           subcategoriesData = subcategoriesApiData;
         }
 
-        const subcategoriesWithEmptyTasks = subcategoriesData.map((subcategory: Subcategory) => ({
-          ...subcategory,
-          tasks: [] // Initialize empty, will be populated by organizeTasks
-        }));
-
-        // ✅ Create category with subcategories
-        const categoryWithSubcategories: Category = {
-          ...category,
-          subcategories: subcategoriesWithEmptyTasks,
-          directTasks: [] // Initialize empty, will be populated by organizeTasks
-        };
-
-        // ✅ Process tasks and organize them
+        // ✅ Process tasks
         const tasksApiData = tasksResponse.data;
         let tasksData = [];
         
@@ -262,10 +279,28 @@ const handleTaskClick = (taskId: string) => {
           tasksData = tasksApiData;
         }
 
-        // ✅ Organize tasks into correct subcategories and direct tasks
+        // ✅ Cache the raw data
+        setDataCache({
+          subcategories: subcategoriesData,
+          tasks: tasksData,
+          timestamp: Date.now()
+        });
+
+        const subcategoriesWithEmptyTasks = subcategoriesData.map((subcategory: Subcategory) => ({
+          ...subcategory,
+          tasks: []
+        }));
+
+        const categoryWithSubcategories: Category = {
+          ...category,
+          subcategories: subcategoriesWithEmptyTasks,
+          directTasks: []
+        };
+
         const organizedCategory = organizeTasks(tasksData, categoryWithSubcategories);
-        
         onUpdateCategory(organizedCategory);
+        
+        setIsInitialLoad(false);
       } catch (error) {
         console.error('Error fetching data:', error);
         const updatedCategory = {
@@ -280,69 +315,72 @@ const handleTaskClick = (taskId: string) => {
     };
     
     fetchData();
-  }, [category.id]);
+  }, []);
 
-
-  // Add this function to your CategoryDetailView component
-const refetchData = async () => {
-  setLoading(true);
-  try {
-    // ✅ Same logic as in useEffect but as a reusable function
-    const [subcategoriesResponse, tasksResponse] = await Promise.all([
-      axios.get(`${backendUrl}/api/subcategories?categoryId=${category.id}`, {
-        withCredentials: true,
-        headers: { 'Content-Type': 'application/json' }
-      }),
-      axios.get(`${backendUrl}/api/tasks?taskType=RECURRING`, {
-        withCredentials: true,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    ]);
-
-    // Process subcategories
-    const subcategoriesApiData = subcategoriesResponse.data;
-    let subcategoriesData = [];
+  // ✅ Updated refetchData function to invalidate cache
+  const refetchData = async () => {
+    setLoading(true);
+    // ✅ Invalidate cache by setting it to null
+    setDataCache(null);
     
-    if (subcategoriesApiData.success && subcategoriesApiData.data && subcategoriesApiData.data.subcategories) {
-      subcategoriesData = subcategoriesApiData.data.subcategories;
-    } else if (Array.isArray(subcategoriesApiData)) {
-      subcategoriesData = subcategoriesApiData;
+    try {
+      console.log('Force refreshing data from API');
+      const [subcategoriesResponse, tasksResponse] = await Promise.all([
+        axios.get(`${backendUrl}/api/subcategories?categoryId=${category.id}`, {
+          withCredentials: true,
+          headers: { 'Content-Type': 'application/json' }
+        }),
+        axios.get(`${backendUrl}/api/tasks?taskType=RECURRING`, {
+          withCredentials: true,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      ]);
+
+      const subcategoriesApiData = subcategoriesResponse.data;
+      let subcategoriesData = [];
+      
+      if (subcategoriesApiData.success && subcategoriesApiData.data && subcategoriesApiData.data.subcategories) {
+        subcategoriesData = subcategoriesApiData.data.subcategories;
+      } else if (Array.isArray(subcategoriesApiData)) {
+        subcategoriesData = subcategoriesApiData;
+      }
+
+      const tasksApiData = tasksResponse.data;
+      let tasksData = [];
+      
+      if (tasksApiData.success && Array.isArray(tasksApiData.data)) {
+        tasksData = tasksApiData.data;
+      } else if (Array.isArray(tasksApiData)) {
+        tasksData = tasksApiData;
+      }
+
+      // ✅ Update cache with fresh data
+      setDataCache({
+        subcategories: subcategoriesData,
+        tasks: tasksData,
+        timestamp: Date.now()
+      });
+
+      const subcategoriesWithEmptyTasks = subcategoriesData.map((subcategory: Subcategory) => ({
+        ...subcategory,
+        tasks: []
+      }));
+
+      const categoryWithSubcategories: Category = {
+        ...category,
+        subcategories: subcategoriesWithEmptyTasks,
+        directTasks: []
+      };
+
+      const organizedCategory = organizeTasks(tasksData, categoryWithSubcategories);
+      onUpdateCategory(organizedCategory);
+    } catch (error) {
+      console.error('Error refetching data:', error);
+      toast.error('Failed to refresh data');
+    } finally {
+      setLoading(false);
     }
-
-    const subcategoriesWithEmptyTasks = subcategoriesData.map((subcategory: Subcategory) => ({
-      ...subcategory,
-      tasks: []
-    }));
-
-    // Create category with subcategories
-    const categoryWithSubcategories: Category = {
-      ...category,
-      subcategories: subcategoriesWithEmptyTasks,
-      directTasks: []
-    };
-
-    // Process tasks and organize them
-    const tasksApiData = tasksResponse.data;
-    let tasksData = [];
-    
-    if (tasksApiData.success && Array.isArray(tasksApiData.data)) {
-      tasksData = tasksApiData.data;
-    } else if (Array.isArray(tasksApiData)) {
-      tasksData = tasksApiData;
-    }
-
-    // Organize tasks into correct subcategories and direct tasks
-    const organizedCategory = organizeTasks(tasksData, categoryWithSubcategories);
-    
-    onUpdateCategory(organizedCategory);
-  } catch (error) {
-    console.error('Error refetching data:', error);
-    toast.error('Failed to refresh data');
-  } finally {
-    setLoading(false);
-  }
-};
-
+  };
 
   const handleEditTask = (task: Task, context: string | number, e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
@@ -359,48 +397,44 @@ const refetchData = async () => {
     setShowDeleteModal(true);
   };
 
- const confirmDelete = async () => {
-  if (!itemToDelete) return;
+  const confirmDelete = async () => {
+    if (!itemToDelete) return;
 
-  const updatedCategory = { ...category };
+    const updatedCategory = { ...category };
 
-  if (deleteType === 'task') {
-    try {
-      // ✅ Call DELETE API first
-      await deleteTask((itemToDelete as Task).id);
-      
-      // ✅ Only update local state if API call succeeds
-      if (taskContext === 'direct') {
-        updatedCategory.directTasks = updatedCategory.directTasks.filter(task => task.id !== itemToDelete.id);
-      } else {
-        const subcategoryIndex = updatedCategory.subcategories.findIndex(sub => sub.id === taskContext);
-        if (subcategoryIndex !== -1) {
-          updatedCategory.subcategories[subcategoryIndex].tasks = 
-            updatedCategory.subcategories[subcategoryIndex].tasks.filter(task => task.id !== itemToDelete.id);
+    if (deleteType === 'task') {
+      try {
+        await deleteTask((itemToDelete as Task).id);
+        
+        if (taskContext === 'direct') {
+          updatedCategory.directTasks = updatedCategory.directTasks.filter(task => task.id !== itemToDelete.id);
+        } else {
+          const subcategoryIndex = updatedCategory.subcategories.findIndex(sub => sub.id === taskContext);
+          if (subcategoryIndex !== -1) {
+            updatedCategory.subcategories[subcategoryIndex].tasks = 
+              updatedCategory.subcategories[subcategoryIndex].tasks.filter(task => task.id !== itemToDelete.id);
+          }
         }
+      } catch (error) {
+        console.error('Failed to delete task:', error);
+        return;
       }
-    } catch (error) {
-      console.error('Failed to delete task:', error);
-     
-      return; // Exit early on API failure
+    } else if (deleteType === 'subcategory') {
+      try {
+        await deleteSubcategory((itemToDelete as Subcategory).id);
+        updatedCategory.subcategories = updatedCategory.subcategories.filter(sub => sub.id !== itemToDelete.id);
+      } catch (error) {
+        console.error('Failed to delete subcategory:', error);
+        return;
+      }
     }
-  } else if (deleteType === 'subcategory') {
-    try {
-      await deleteSubcategory((itemToDelete as Subcategory).id);
-      updatedCategory.subcategories = updatedCategory.subcategories.filter(sub => sub.id !== itemToDelete.id);
-    } catch (error) {
-      console.error('Failed to delete subcategory:', error);
-     
-      return;
-    }
-  }
 
-  onUpdateCategory(updatedCategory);
-  setShowDeleteModal(false);
-  setItemToDelete(null);
-  setDeleteType('task');
-  setTaskContext('');
-};
+    onUpdateCategory(updatedCategory);
+    setShowDeleteModal(false);
+    setItemToDelete(null);
+    setDeleteType('task');
+    setTaskContext('');
+  };
 
   const handleEditSubcategory = (subcategory: Subcategory, e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
@@ -408,7 +442,7 @@ const refetchData = async () => {
     setShowEditSubcategoryModal(true);
   };
 
-  const handleUpdateSubcategory = async(updatedSubcategory: Subcategory) => {
+  const handleUpdateSubcategory = async (updatedSubcategory: Subcategory) => {
     const updatedCategory: Category = {
       ...category,
       subcategories: category.subcategories.map(sub => 
@@ -422,21 +456,15 @@ const refetchData = async () => {
     await refetchData();
   };
 
-  // ✅ Updated getScheduleText for new task structure
   const getScheduleText = (task: Task): string => {
-    console.log("Task Printing",task)
-    if(task.repetitionConfig.type ==='interval'){
+    console.log("Task Printing", task);
+    if (task.repetitionConfig.type === 'interval') {
       return `Every ${task.repetitionConfig.days} days at ${convertUTCToIST(task.repetitionConfig.atTime || '')}`;
-    }
-    else if(task.repetitionConfig.type ==='weekly'){
+    } else if (task.repetitionConfig.type === 'weekly') {
       return `Every ${task.repetitionConfig.onDays?.join(', ')} of the week at ${convertUTCToIST(task.repetitionConfig.atTime || '')}`;
+    } else if (task.repetitionConfig.type === 'monthly') {
+      return `On day ${task.repetitionConfig.onDate}th of every month at ${convertUTCToIST(task.repetitionConfig.atTime || '')}`;
     }
-      else if(task.repetitionConfig.type ==='monthly'){
-        return `On day ${task.repetitionConfig.onDate}th of every month at ${convertUTCToIST(task.repetitionConfig.atTime || '')}`;
-      }
-   
-    
-    
     
     return 'No schedule';
   };
@@ -509,6 +537,12 @@ const refetchData = async () => {
             <div>
               <h1 className="text-2xl font-bold text-gray-800">{category.name}</h1>
               <p className="text-sm text-gray-600 mt-1">{category.description || 'Category Management'}</p>
+              {/* ✅ Show cache status for debugging */}
+              {!loading && dataCache && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Last updated: {new Date(dataCache.timestamp).toLocaleTimeString()}
+                </p>
+              )}
             </div>
           </div>
           <div className="flex items-center space-x-2">
@@ -574,7 +608,7 @@ const refetchData = async () => {
                 {filteredDirectTasks.map((task) => (
                   <div
                     key={task.id}
-                    className="bg-gray-50 border border-gray-200 rounded-lg p-4 hover:shadow-md hover:border-blue-300 transition-all duration-200 relative"
+                    className="bg-gray-50 border border-gray-200 rounded-lg p-4 hover:shadow-md hover:border-blue-300 transition-all duration-200 relative cursor-pointer"
                     onClick={() => handleTaskClick(task.id)}
                   >
                     <div className="absolute top-3 right-3 flex items-center space-x-1 bg-white rounded-lg shadow-sm border border-gray-200">
@@ -586,12 +620,12 @@ const refetchData = async () => {
                         <PencilIcon className="w-3.5 h-3.5" />
                       </button>
                       <button
-    onClick={(e) => handleAssignMember(task, e)}
-    className="p-1.5 text-green-600 hover:bg-green-50 transition-colors border-r border-gray-200"
-    title="Assign Members"
-  >
-    <UserPlusIcon className="w-3.5 h-3.5" />
-  </button>
+                        onClick={(e) => handleAssignMember(task, e)}
+                        className="p-1.5 text-green-600 hover:bg-green-50 transition-colors border-r border-gray-200"
+                        title="Assign Members"
+                      >
+                        <UserPlusIcon className="w-3.5 h-3.5" />
+                      </button>
                       <button
                         onClick={(e) => handleDeleteItem(task, 'task', 'direct', e)}
                         className="p-1.5 text-red-600 hover:bg-red-50 rounded-r-lg transition-colors"
@@ -625,7 +659,6 @@ const refetchData = async () => {
                           ) : (
                             <span className="truncate">Unassigned</span>
                           )}
-                        
                         </div>
                       </div>
                     </div>
@@ -635,14 +668,24 @@ const refetchData = async () => {
             </div>
           )}
 
-          {/* Subcategories */}
+          {/* ✅ Updated Subcategories with collapsible functionality */}
           {filteredSubcategories.map((subcategory) => {
             const subcategoryTasks = filterTasks(subcategory.tasks || []);
+            const isCollapsed = collapsedSubcategories.has(subcategory.id);
             
             return (
               <div key={subcategory.id} className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
                 <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center space-x-3 min-w-0 flex-1">
+                  <div 
+                    className="flex items-center space-x-3 min-w-0 flex-1 cursor-pointer"
+                    onClick={() => toggleSubcategory(subcategory.id)}
+                  >
+                    {/* ✅ Collapse/Expand icon */}
+                    {isCollapsed ? (
+                      <ChevronRightIcon className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                    ) : (
+                      <ChevronDownIcon className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                    )}
                     <h3 className="text-lg font-semibold text-gray-800 flex items-center min-w-0">
                       <FolderIcon className="w-5 h-5 mr-2 text-indigo-600 flex-shrink-0" />
                       <span className="truncate">{subcategory.name} ({subcategoryTasks?.length || 0})</span>
@@ -676,75 +719,78 @@ const refetchData = async () => {
                   </button>
                 </div>
                 
-                {subcategoryTasks.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {subcategoryTasks.map((task) => (
-                      <div
-                        key={task.id}
-                        className="bg-gray-50 border border-gray-200 rounded-lg p-4 hover:shadow-md hover:border-indigo-300 transition-all duration-200 relative"
-                        onClick={() => handleTaskClick(task.id)}
-                      >
-                        <div className="absolute top-3 right-3 flex items-center space-x-1 bg-white rounded-lg shadow-sm border border-gray-200">
-                          <button
-                            onClick={(e) => handleEditTask(task, subcategory.id, e)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-l-lg transition-colors border-r border-gray-200"
-                            title="Edit Task"
-                          >
-                            <PencilIcon className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-    onClick={(e) => handleAssignMember(task, e)}
-    className="p-1.5 text-green-600 hover:bg-green-50 transition-colors border-r border-gray-200"
-    title="Assign Members"
-  >
-    <UserPlusIcon className="w-3.5 h-3.5" />
-  </button>
-                          <button
-                            onClick={(e) => handleDeleteItem(task, 'task', subcategory.id, e)}
-                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-r-lg transition-colors"
-                            title="Delete Task"
-                          >
-                            <TrashIcon className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                {/* ✅ Conditionally render tasks based on collapse state */}
+                {!isCollapsed && (
+                  subcategoryTasks.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {subcategoryTasks.map((task) => (
+                        <div
+                          key={task.id}
+                          className="bg-gray-50 border border-gray-200 rounded-lg p-4 hover:shadow-md hover:border-indigo-300 transition-all duration-200 relative cursor-pointer"
+                          onClick={() => handleTaskClick(task.id)}
+                        >
+                          <div className="absolute top-3 right-3 flex items-center space-x-1 bg-white rounded-lg shadow-sm border border-gray-200">
+                            <button
+                              onClick={(e) => handleEditTask(task, subcategory.id, e)}
+                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-l-lg transition-colors border-r border-gray-200"
+                              title="Edit Task"
+                            >
+                              <PencilIcon className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => handleAssignMember(task, e)}
+                              className="p-1.5 text-green-600 hover:bg-green-50 transition-colors border-r border-gray-200"
+                              title="Assign Members"
+                            >
+                              <UserPlusIcon className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => handleDeleteItem(task, 'task', subcategory.id, e)}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-r-lg transition-colors"
+                              title="Delete Task"
+                            >
+                              <TrashIcon className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
 
-                        <div className="pr-24">
-                          <div className="flex items-start justify-between mb-3">
-                            <h4 className="font-medium text-gray-900 text-sm line-clamp-2">{task.title}</h4>
-                            <div className="ml-2 flex-shrink-0">
-                              {getStatusBadge(task.status)}
+                          <div className="pr-24">
+                            <div className="flex items-start justify-between mb-3">
+                              <h4 className="font-medium text-gray-900 text-sm line-clamp-2">{task.title}</h4>
+                              <div className="ml-2 flex-shrink-0">
+                                {getStatusBadge(task.status)}
+                              </div>
                             </div>
-                          </div>
-                          <p className="text-xs text-gray-600 mb-3 line-clamp-2">{task.description || 'No description'}</p>
-                          <div className="space-y-2">
-                            <div className="flex items-center text-xs text-gray-500">
-                              <CalendarDaysIcon className="w-3 h-3 mr-1 flex-shrink-0" />
-                              <span className="truncate">{getScheduleText(task)}</span>
-                            </div>
-                            <div className="flex items-center text-xs text-gray-500">
-                              <UserIcon className="w-3 h-3 mr-1 flex-shrink-0" />
-                               {task.assignedTo && task.assignedTo.length > 0 ? (
-                            <span className="truncate">
-                              {task.assignedTo.length === 1 
-                                ? `${task.assignedTo[0].firstName} ${task.assignedTo[0].lastName}`
-                                : `${task.assignedTo.length} members assigned`}
-                            </span>
-                          ) : (
-                            <span className="truncate">Unassigned</span>
-                          )}
+                            <p className="text-xs text-gray-600 mb-3 line-clamp-2">{task.description || 'No description'}</p>
+                            <div className="space-y-2">
+                              <div className="flex items-center text-xs text-gray-500">
+                                <CalendarDaysIcon className="w-3 h-3 mr-1 flex-shrink-0" />
+                                <span className="truncate">{getScheduleText(task)}</span>
+                              </div>
+                              <div className="flex items-center text-xs text-gray-500">
+                                <UserIcon className="w-3 h-3 mr-1 flex-shrink-0" />
+                                {task.assignedTo && task.assignedTo.length > 0 ? (
+                                  <span className="truncate">
+                                    {task.assignedTo.length === 1 
+                                      ? `${task.assignedTo[0].firstName} ${task.assignedTo[0].lastName}`
+                                      : `${task.assignedTo.length} members assigned`}
+                                  </span>
+                                ) : (
+                                  <span className="truncate">Unassigned</span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 bg-gray-50 rounded-lg">
-                    <DocumentTextIcon className="w-12 h-12 text-gray-300 mx-auto mb-2" />
-                    <p className="text-gray-500">
-                      {searchTerm ? 'No tasks match your search' : 'No tasks in this subcategory'}
-                    </p>
-                  </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 bg-gray-50 rounded-lg">
+                      <DocumentTextIcon className="w-12 h-12 text-gray-300 mx-auto mb-2" />
+                      <p className="text-gray-500">
+                        {searchTerm ? 'No tasks match your search' : 'No tasks in this subcategory'}
+                      </p>
+                    </div>
+                  )
                 )}
               </div>
             );
@@ -789,7 +835,7 @@ const refetchData = async () => {
         </>
       )}
 
-      {/* Modals - Keep existing modal code */}
+      {/* All your existing modals remain the same */}
       {showCreateTaskModal && (
         <CreateTaskModal
           onClose={() => {
@@ -801,7 +847,6 @@ const refetchData = async () => {
             setShowCreateTaskModal(false);
             setTaskContext('');
             await refetchData();
-
           }}
           isSubcategoryTask={taskContext !== 'direct'}
           categoryId={category.id}
@@ -815,7 +860,6 @@ const refetchData = async () => {
           onCreateSubcategory={async (subcategoryData) => {
             try {
               await createSubcategory(subcategoryData);
-              
               setShowCreateSubcategoryModal(false);
               await refetchData();
             } catch (error) {
@@ -826,28 +870,25 @@ const refetchData = async () => {
       )}
 
       {showEditTaskModal && taskToEdit && (
-  <EditTaskModal
-    task={taskToEdit}
-    onClose={() => {
-      setShowEditTaskModal(false);
-      setTaskToEdit(null);
-      setTaskContext('');
-    }}
-    onUpdateTask={async (updatedTaskData) => {
-      // ✅ Handle the updated task data
-      toast.success('Task updated successfully');
-      
-      setShowEditTaskModal(false);
-      setTaskToEdit(null);
-      setTaskContext('');
-      await refetchData();
-    }}
-    isSubcategoryTask={taskContext !== 'direct'}
-    categoryId={category.id}
-    subcategoryId={taskContext === 'direct' ? null : taskContext as string}
-  />
-)}
-
+        <EditTaskModal
+          task={taskToEdit}
+          onClose={() => {
+            setShowEditTaskModal(false);
+            setTaskToEdit(null);
+            setTaskContext('');
+          }}
+          onUpdateTask={async (updatedTaskData) => {
+            toast.success('Task updated successfully');
+            setShowEditTaskModal(false);
+            setTaskToEdit(null);
+            setTaskContext('');
+            await refetchData();
+          }}
+          isSubcategoryTask={taskContext !== 'direct'}
+          categoryId={category.id}
+          subcategoryId={taskContext === 'direct' ? null : taskContext as string}
+        />
+      )}
 
       {showEditSubcategoryModal && subcategoryToEdit && (
         <EditSubcategoryModal
@@ -875,30 +916,29 @@ const refetchData = async () => {
         />
       )}
 
-
       {showAssignModal && taskToAssign && (
-  <AssignMemberModal
-    taskId={taskToAssign.id}
-    taskTitle={taskToAssign.title}
-    onClose={() => {
-      setShowAssignModal(false);
-      setTaskToAssign(null);
-    }}
-    onAssignMembers={handleAssignMembers}
-  />
-)}
+        <AssignMemberModal
+          taskId={taskToAssign.id}
+          taskTitle={taskToAssign.title}
+          assignedMembers={taskToAssign.assignedTo || []}
+          
+          onClose={() => {
+            setShowAssignModal(false);
+            setTaskToAssign(null);
+          }}
+          onAssignMembers={handleAssignMembers}
+        />
+      )}
 
-{showTaskViewModal && selectedTaskId && (
-  <TaskViewModal
-    taskId={selectedTaskId}
-    
-    onClose={() => {
-      setShowTaskViewModal(false);
-      setSelectedTaskId(null);
-    }}
-  />
-)}
-
+      {showTaskViewModal && selectedTaskId && (
+        <TaskViewModal
+          taskId={selectedTaskId}
+          onClose={() => {
+            setShowTaskViewModal(false);
+            setSelectedTaskId(null);
+          }}
+        />
+      )}
     </div>
   );
 }
