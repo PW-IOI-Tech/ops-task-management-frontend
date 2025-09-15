@@ -1,4 +1,3 @@
-// components/AssignMemberModal.tsx
 'use client';
 import React, { useState, useEffect } from 'react';
 import { XMarkIcon, UserPlusIcon, CheckIcon, UserIcon } from '@heroicons/react/24/outline';
@@ -10,13 +9,18 @@ interface Member {
   lastName: string;
   email: string;
 }
-interface Assignment {
-  assignedTo: string;
+
+interface AssignedMember {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email?: string;
 }
 
 interface AssignMemberModalProps {
   taskId: string;
   taskTitle: string;
+  assignedMembers: AssignedMember[]; // ✅ NEW: Receive assigned members from parent
   onClose: () => void;
   onAssignMembers: (memberIds: string[]) => void;
 }
@@ -24,6 +28,7 @@ interface AssignMemberModalProps {
 const AssignMemberModal: React.FC<AssignMemberModalProps> = ({
   taskId,
   taskTitle,
+  assignedMembers: initialAssignedMembers, // ✅ Rename to avoid confusion
   onClose,
   onAssignMembers
 }) => {
@@ -36,21 +41,15 @@ const AssignMemberModal: React.FC<AssignMemberModalProps> = ({
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
-  // Fetch all members and current assignments
+  // ✅ Fetch only members, no task API call needed
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchMembers = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        // Fetch all members
+        // Fetch all members only
         const membersResponse = await axios.get(`${backendUrl}/api/users/members`, {
-          withCredentials: true,
-          headers: { 'Content-Type': 'application/json' }
-        });
-
-        // Fetch current task details with assignments
-        const taskResponse = await axios.get(`${backendUrl}/api/tasks/${taskId}`, {
           withCredentials: true,
           headers: { 'Content-Type': 'application/json' }
         });
@@ -62,33 +61,25 @@ const AssignMemberModal: React.FC<AssignMemberModalProps> = ({
           return;
         }
 
-        // ✅ Extract already assigned member IDs from taskAssignments
-        if (taskResponse.data.success) {
-          const taskData = taskResponse.data.data;
-          const taskAssignments = taskData.taskAssignments || [];
-          
-          // Extract assignedTo IDs from taskAssignments
-          const assignedMemberIds = taskAssignments.map((assignment: Assignment) => assignment.assignedTo);
-          console.log('Already assigned members:', assignedMemberIds);
-          
-          setAssignedMembers(assignedMemberIds);
-          setSelectedMembers(assignedMemberIds); // Pre-select already assigned members
-        }
+        // ✅ Process assigned members from props instead of API
+        const assignedMemberIds = initialAssignedMembers.map(member => member.id);
+        const uniqueAssignedMemberIds = [...new Set(assignedMemberIds)] as string[];
+        
+        console.log('Already assigned members from parent:', uniqueAssignedMemberIds);
+        
+        setAssignedMembers(uniqueAssignedMemberIds);
+        setSelectedMembers(uniqueAssignedMemberIds); // Pre-select already assigned members
 
       } catch (error: unknown) {
-        console.error('Error fetching data:', error);
-        if (axios.isAxiosError(error) && error.response?.status === 409) {
-          setError('Some members are already assigned to this task');
-        } else {
-          setError('Failed to load data. Please try again.');
-        }
+        console.error('Error fetching members:', error);
+        setError('Failed to load members. Please try again.');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchData();
-  }, [taskId, backendUrl]);
+    fetchMembers();
+  }, [taskId, backendUrl, initialAssignedMembers]);
 
   const handleMemberToggle = (memberId: string) => {
     // Don't allow deselecting already assigned members
@@ -117,10 +108,6 @@ const AssignMemberModal: React.FC<AssignMemberModalProps> = ({
       }
 
       console.log('Assigning new members:', newMemberIds);
-      console.log('Request payload:', {
-        taskId: taskId,
-        userIds: newMemberIds
-      });
 
       const response = await axios.post(`${backendUrl}/api/assignments`, {
         taskId: taskId,
@@ -162,14 +149,30 @@ const AssignMemberModal: React.FC<AssignMemberModalProps> = ({
     return 'available';
   };
 
-  // ✅ Get member name for display
+  // ✅ Get member name for display - check both members list and assigned members from parent
   const getMemberName = (memberId: string) => {
+    // First try to find in full members list
     const member = members.find(m => m.id === memberId);
-    return member ? `${member.firstName} ${member.lastName}` : 'Unknown Member';
+    if (member) {
+      return `${member.firstName} ${member.lastName}`;
+    }
+    
+    // If not found in members, try assigned members from parent (fallback)
+    const assignedMember = initialAssignedMembers.find(m => m.id === memberId);
+    if (assignedMember) {
+      return `${assignedMember.firstName} ${assignedMember.lastName}`;
+    }
+    
+    return 'Unknown Member';
+  };
+
+  // ✅ Get unique assigned members for display
+  const getUniqueAssignedMembers = () => {
+    return [...new Set(assignedMembers)];
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 p-6 rounded-t-xl">
@@ -214,8 +217,11 @@ const AssignMemberModal: React.FC<AssignMemberModalProps> = ({
                   <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
                     <p className="text-sm font-medium text-green-800 mb-1">Currently Assigned:</p>
                     <div className="flex flex-wrap gap-1">
-                      {assignedMembers.map(memberId => (
-                        <span key={memberId} className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                      {getUniqueAssignedMembers().map((memberId, index) => (
+                        <span 
+                          key={`assigned-${memberId}-${index}`} 
+                          className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700"
+                        >
                           {getMemberName(memberId)}
                         </span>
                       ))}
@@ -298,7 +304,7 @@ const AssignMemberModal: React.FC<AssignMemberModalProps> = ({
                 {selectedMembers.length} member{selectedMembers.length !== 1 ? 's' : ''} selected
                 {assignedMembers.length > 0 && (
                   <span className="ml-2 text-green-600">
-                    ({assignedMembers.length} already assigned)
+                    ({getUniqueAssignedMembers().length} already assigned)
                   </span>
                 )}
               </p>
