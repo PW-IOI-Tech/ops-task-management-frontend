@@ -29,20 +29,6 @@ const formatDateForDisplay = (date: Date): string => {
   }).format(date);
 };
 
-const formatDateForInput = (date: Date): string => {
-  // Create a new date adjusted for IST timezone offset for HTML date input
-  const istOffset = 5.5 * 60; // IST is UTC+5:30 in minutes
-  const localOffset = date.getTimezoneOffset(); // Local timezone offset in minutes
-  const istDate = new Date(date.getTime() + (istOffset + localOffset) * 60 * 1000);
-  
-  const year = istDate.getFullYear();
-  const month = String(istDate.getMonth() + 1).padStart(2, '0');
-  const day = String(istDate.getDate()).padStart(2, '0');
-  
-  return `${year}-${month}-${day}`;
-};
-
-
 // Alternative simpler approach - using manual offset calculation
 const getISTDateString = (): string => {
   const now = new Date();
@@ -182,21 +168,21 @@ export default function Overview() {
 
   // Memoized task updates transformation
   const taskUpdates = useMemo(() => {
-    return dashboardData.categorySummary.flatMap((category, categoryIndex) => 
-      category.assignees.map((assignee, assigneeIndex) => ({
-        id: `${categoryIndex}-${assigneeIndex}`,
-        name: category.category,
-        description: `Category: ${category.category}`,
-        category: category.category,
-        subCategory: null,
-        completionRate: assignee.completionRate,
-        completedTasks: assignee.completed,
-        totalTasks: assignee.total,
-        assignee: assignee.name,
-        taskType: 'normal'
-      }))
-    );
-  }, [dashboardData.categorySummary]);
+  return (dashboardData?.categorySummary ?? []).flatMap((category, categoryIndex) => 
+    (category.assignees ?? []).map((assignee, assigneeIndex) => ({
+      id: `${categoryIndex}-${assigneeIndex}`,
+      name: category.category,
+      description: `Category: ${category.category}`,
+      category: category.category,
+      subCategory: null,
+      completionRate: assignee.completionRate,
+      completedTasks: assignee.completed,
+      totalTasks: assignee.total,
+      assignee: assignee.name,
+      taskType: 'normal'
+    }))
+  );
+}, [dashboardData]);
 
   // Memoized filtered tasks
   const filteredTasks = useMemo(() => {
